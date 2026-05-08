@@ -34,7 +34,10 @@ jobs:
         run: nuget restore $env:SOLUTION
 
       - name: Build solution
-        run: msbuild $env:SOLUTION /p:Configuration=$env:CONFIG /p:Platform=$env:PLATFORM /m
+        # /p:PlatformToolset=v143 forces VS 2022 toolset, overriding any v145 (VS 2026)
+        # references in individual vcxproj files (tracy/uriparser). The GitHub-hosted
+        # windows-2022 runner only ships v143; v145 lives on Azure DevOps' vs2026 image.
+        run: msbuild $env:SOLUTION /p:Configuration=$env:CONFIG /p:Platform=$env:PLATFORM /p:PlatformToolset=v143 /m
 
       - name: Stage binaries (rename wrapper to main entry)
         shell: pwsh

@@ -100,3 +100,6 @@
 [submodule "third_party/psxlua"]
 	path = third_party/psxlua
 	url = https://github.com/grumpycoders/psxlua.git
+[submodule "third_party/libvj"]
+	path = third_party/libvj
+	url = https://github.com/pbfmp5g55-gif/ps1-primitive-vj.git

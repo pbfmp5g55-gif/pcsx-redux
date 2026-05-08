@@ -127,6 +127,9 @@
     <ClCompile Include="..\..\src\core\gpulogger.cc">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\core\vj_bridge.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\core\memorycard.cc">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -277,6 +280,9 @@
       <Filter>Header Files\OpenGL GPU</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\core\gpulogger.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\core\vj_bridge.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\core\memorycard.h">

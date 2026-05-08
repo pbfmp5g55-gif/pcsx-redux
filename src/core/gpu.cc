@@ -28,6 +28,7 @@
 #include "core/pgxp_mem.h"
 #include "core/psxdma.h"
 #include "core/psxhw.h"
+#include "core/vj_bridge.h"
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
 
@@ -95,6 +96,7 @@ void GPU::Poly<shading, shape, textured, blend, modulation>::processWrite(Buffer
     offset = m_gpu->m_lastOffset;
     m_gpu->m_defaultProcessor.setActive();
     g_emulator->m_gpuLogger->addNode(*this, origin, origvalue, length);
+    PCSX::vj::onPrimitive(*this);
     m_gpu->write0(this);
 }
 
@@ -153,6 +155,7 @@ void GPU::Line<shading, lineType, blend>::processWrite(Buffer & buf, Logged::Ori
     m_gpu->m_defaultProcessor.setActive();
     if ((colors.size() >= 2) && ((colors.size() == x.size()))) {
         g_emulator->m_gpuLogger->addNode(*this, origin, origvalue, length);
+        PCSX::vj::onPrimitive(*this);
         m_gpu->write0(this);
     } else {
         g_system->log(LogClass::GPU, "Got an invalid line command...\n");
@@ -221,6 +224,7 @@ void GPU::Rect<size, textured, blend, modulation>::processWrite(Buffer & buf, Lo
     offset = m_gpu->m_lastOffset;
     m_gpu->m_defaultProcessor.setActive();
     g_emulator->m_gpuLogger->addNode(*this, origin, origvalue, length);
+    PCSX::vj::onPrimitive(*this);
     m_gpu->write0(this);
 }
 // clang-format on

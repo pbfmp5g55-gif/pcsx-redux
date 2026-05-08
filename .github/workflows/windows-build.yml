@@ -1,0 +1,62 @@
+name: Windows CI (fork)
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-2022
+    env:
+      SOLUTION: vsprojects/pcsx-redux.sln
+      CONFIG: ReleaseWithClangCL
+      PLATFORM: x64
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: NuGet restore
+        run: nuget restore $env:SOLUTION
+
+      - name: Build solution
+        run: msbuild $env:SOLUTION /p:Configuration=$env:CONFIG /p:Platform=$env:PLATFORM /m
+
+      - name: Stage binaries (rename wrapper to main entry)
+        shell: pwsh
+        run: |
+          $out = "vsprojects/$env:PLATFORM/$env:CONFIG"
+          if (Test-Path "$out/pcsx-redux.exe")  { Rename-Item "$out/pcsx-redux.exe"  "pcsx-redux.main" -Force }
+          if (Test-Path "$out/pcsx-wrapper.exe") { Rename-Item "$out/pcsx-wrapper.exe" "pcsx-redux.exe"   -Force }
+          mkdir artifacts | Out-Null
+          Copy-Item "$out/*.exe" artifacts/ -ErrorAction SilentlyContinue
+          Copy-Item "$out/*.dll" artifacts/ -ErrorAction SilentlyContinue
+          Copy-Item "$out/pcsx-redux.main" artifacts/ -ErrorAction SilentlyContinue
+          if (Test-Path third_party/SDL_GameControllerDB/gamecontrollerdb.txt) {
+            Copy-Item third_party/SDL_GameControllerDB/gamecontrollerdb.txt artifacts/
+          }
+          Copy-Item third_party/noto/* artifacts/ -ErrorAction SilentlyContinue
+          Copy-Item LICENSE artifacts/ -ErrorAction SilentlyContinue
+          Get-ChildItem artifacts | Format-Table Name, Length
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pcsx-redux-windows-x64-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 14

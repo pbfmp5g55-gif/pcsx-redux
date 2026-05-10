@@ -34,29 +34,27 @@ jobs:
         run: nuget restore $env:SOLUTION
 
       - name: Build solution
-        # Build via .sln targeting only the two app projects (pcsx-redux + pcsx-wrapper).
-        # Direct .vcxproj invocation (CI #6) does NOT work because some sub-projects
-        # (e.g. tracy.vcxproj) define only "Disabled|x64" / "Enabled|x64" as their own
-        # configurations and rely on the sln-level ProjectConfigurationPlatforms mapping
-        # to translate ReleaseWithClangCL|x64 to Disabled|x64. That mapping is only
-        # applied when msbuild drives via the .sln metaproj.
+        # Build the entire .sln. Test projects (testsupport / pcsxrunner /
+        # memoryleakdetector) have their .Build.0 lines removed for the
+        # ReleaseWithClangCL|x64 sln config in pcsx-redux.sln so they are skipped
+        # at sln-build time (equivalent to unchecking the Build column in VS's
+        # Configuration Manager). They still appear in the .sln but msbuild does
+        # not attempt to build them, sidestepping the gtest_main / LNK1561 issue
+        # caused by ClangCL+v143 not matching the v140 googletest NuGet's auto-link.
         #
-        # msbuild target naming for sln projects: project names are NOT escaped at the
-        # hyphen — only %, $, @, ;, ., (, ), ' are replaced with _ per MS docs. So
-        # /t:pcsx-redux:Build (with hyphen) is correct. CI #4 used /t:pcsx_redux which
-        # was interpreted as a verb (no :Build suffix); CI #5 used /t:pcsx_redux:Build
-        # which had a wrongly-underscored project name → MSB4057 in both cases.
-        # The ":Build" suffix is required so msbuild treats the token as a project
-        # specifier rather than a verb to apply across all projects.
-        #
-        # Test projects (testsupport / pcsxrunner / memoryleakdetector) are not refer-
-        # enced by pcsx-redux or pcsx-wrapper, so they get skipped automatically and
-        # we do not hit the gtest_main / LNK1561 issue.
+        # We tried /t: filtering to limit to pcsx-redux + pcsx-wrapper:
+        #   CI #4: /t:pcsx_redux            -> MSB4057 (verb, no :Build suffix)
+        #   CI #5: /t:pcsx_redux:Build      -> MSB4057 (wrong escape: hyphen kept)
+        #   CI #7: /t:pcsx-redux:Build      -> MSB4057 (still not found in metaproj)
+        # The .sln has a folder named "pcsx-redux" *and* a project named "pcsx-redux"
+        # (the mainthunk.vcxproj), and the resulting metaproj does not generate a
+        # working :Build target for that name. Skipping at the .sln config-mapping
+        # level avoids the metaproj target lookup entirely.
         #
         # /p:PlatformToolset=v143 overrides v145 (VS 2026) declarations in tracy /
-        # uriparser .vcxproj. The windows-2022 runner only ships v143; upstream's
+        # uriparser .vcxproj. windows-2022 runner only ships v143; upstream's
         # Azure pipeline uses windows-2025-vs2026 which has v145 ClangCL.
-        run: msbuild $env:SOLUTION "/t:pcsx-redux:Build;pcsx-wrapper:Build" /p:Configuration=$env:CONFIG /p:Platform=$env:PLATFORM /p:PlatformToolset=v143 /m
+        run: msbuild $env:SOLUTION /p:Configuration=$env:CONFIG /p:Platform=$env:PLATFORM /p:PlatformToolset=v143 /m
 
       - name: Stage binaries (rename wrapper to main entry)
         shell: pwsh

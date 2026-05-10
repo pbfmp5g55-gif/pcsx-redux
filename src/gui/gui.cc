@@ -1430,6 +1430,7 @@ in Configuration->Emulation, restart PCSX-Redux, then try again.)"));
                     }
                     ImGui::MenuItem(_("Show GPU logger"), nullptr, &m_gpuLogger.m_show);
                     ImGui::MenuItem(_("Show GPU debug"), nullptr, &PCSX::g_emulator->m_gpu->m_showDebug);
+                    ImGui::MenuItem(_("Show VJ panel"), nullptr, &m_showVJ);
                     ImGui::EndMenu();
                 }
                 if (ImGui::BeginMenu(_("SPU"))) {
@@ -1586,6 +1587,8 @@ in Configuration->Emulation, restart PCSX-Redux, then try again.)"));
         ImGui::SetNextWindowSize(ImVec2(1200, 250), ImGuiCond_FirstUseEver);
         changed |= m_log.draw(this, _("Logs"));
     }
+
+    m_vjPanel.draw(_("VJ subsystem"));
 
     if (m_luaConsole.m_show) {
         ImGui::SetNextWindowPos(ImVec2(15, 545), ImGuiCond_FirstUseEver);

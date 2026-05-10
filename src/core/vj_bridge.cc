@@ -140,6 +140,15 @@ void ensureInit() {
 bool isEnabled() { return g_enabled.load(); }
 void setEnabled(bool e) { g_enabled.store(e); }
 
+::vj::Params& params() {
+    ensureInit();  // make sure env-var seeding has happened before anyone reads
+    return g_params;
+}
+
+unsigned long long lastFramePrimitiveCount() {
+    return static_cast<unsigned long long>(g_lastFramePrims);
+}
+
 namespace detail {
 
 bool intercept(::vj::Primitive& prim,

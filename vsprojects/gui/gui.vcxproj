@@ -158,6 +158,7 @@
     <ClCompile Include="..\..\src\gui\widgets\registers.cc" />
     <ClCompile Include="..\..\src\gui\widgets\shader-editor.cc" />
     <ClCompile Include="..\..\src\gui\widgets\sio1.cc" />
+    <ClCompile Include="..\..\src\gui\widgets\vj_panel.cc" />
     <ClCompile Include="..\..\src\gui\widgets\vram-viewer.cc" />
     <ClCompile Include="..\..\src\gui\widgets\zep-lua.cc" />
     <ClCompile Include="..\..\src\gui\widgets\zep.cc" />
@@ -195,6 +196,7 @@
     <ClInclude Include="..\..\src\gui\widgets\registers.h" />
     <ClInclude Include="..\..\src\gui\widgets\shader-editor.h" />
     <ClInclude Include="..\..\src\gui\widgets\sio1.h" />
+    <ClInclude Include="..\..\src\gui\widgets\vj_panel.h" />
     <ClInclude Include="..\..\src\gui\widgets\vram-viewer.h" />
     <ClInclude Include="..\..\src\gui\widgets\zep-lua.h" />
     <ClInclude Include="..\..\src\gui\widgets\zep.h" />

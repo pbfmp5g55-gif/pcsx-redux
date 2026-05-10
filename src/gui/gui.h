@@ -59,6 +59,7 @@
 #include "gui/widgets/shader-editor.h"
 #include "gui/widgets/sio1.h"
 #include "gui/widgets/ram-viewer.h"
+#include "gui/widgets/vj_panel.h"
 #include "gui/widgets/vram-viewer.h"
 #include "imgui.h"
 #include "imgui_md/imgui_md.h"
@@ -430,6 +431,9 @@ class GUI final : public UI {
 
     Widgets::GPULogger m_gpuLogger{settings.get<ShowGPULogger>().value};
     Widgets::HeapViewer m_heapViewer{settings.get<ShowHeapViewer>().value};
+
+    bool m_showVJ = false;
+    Widgets::VJPanel m_vjPanel{m_showVJ};
 
     EventBus::Listener m_listener;
 

@@ -37,6 +37,9 @@
     <ClCompile Include="..\..\src\gui\widgets\registers.cc">
       <Filter>Source Files\widgets</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\gui\widgets\vj_panel.cc">
+      <Filter>Source Files\widgets</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\gui\widgets\vram-viewer.cc">
       <Filter>Source Files\widgets</Filter>
     </ClCompile>
@@ -154,6 +157,9 @@
       <Filter>Header Files\widgets</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\gui\widgets\registers.h">
+      <Filter>Header Files\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gui\widgets\vj_panel.h">
       <Filter>Header Files\widgets</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\gui\widgets\vram-viewer.h">

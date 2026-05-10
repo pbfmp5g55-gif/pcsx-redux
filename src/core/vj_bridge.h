@@ -24,6 +24,7 @@
 #include <functional>
 
 #include "core/gpu.h"
+#include "vj/Params.h"
 #include "vj/Primitive.h"
 
 namespace PCSX {
@@ -31,6 +32,15 @@ namespace vj {
 
 bool isEnabled();
 void setEnabled(bool enabled);
+
+// Live process-wide glitch params. Mutating these between frames takes effect
+// on the next vj::PrimitiveInterceptor::beginFrame(). Defaults are all zero
+// (passthrough); env vars (VJ_MASTER / VJ_GEOMETRY / ...) seed them at startup.
+::vj::Params& params();
+
+// Per-frame primitive counter — last fully-completed frame's total. Mainly
+// useful for HUD-style overlays in the GUI.
+unsigned long long lastFramePrimitiveCount();
 
 namespace detail {
 // Submits prim into the libvj interceptor. If the interceptor approves (or

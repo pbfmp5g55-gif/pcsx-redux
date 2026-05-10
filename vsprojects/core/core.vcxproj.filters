@@ -130,6 +130,27 @@
     <ClCompile Include="..\..\src\core\vj_bridge.cc">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\third_party\libvj\vj\src\DebugOverlay.cpp">
+      <Filter>Source Files\libvj</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\libvj\vj\src\DepthDelayQueue.cpp">
+      <Filter>Source Files\libvj</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\libvj\vj\src\MidiController.cpp">
+      <Filter>Source Files\libvj</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\libvj\vj\src\PrimitiveContext.cpp">
+      <Filter>Source Files\libvj</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\libvj\vj\src\PrimitiveInterceptor.cpp">
+      <Filter>Source Files\libvj</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\libvj\vj\src\RandomController.cpp">
+      <Filter>Source Files\libvj</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\libvj\vj\src\SafetyLimiter.cpp">
+      <Filter>Source Files\libvj</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\core\memorycard.cc">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -346,6 +367,9 @@
     </Filter>
     <Filter Include="Header Files\Dynarec Aarch64">
       <UniqueIdentifier>{6ceacdfa-e9cd-423a-a320-f97015d17218}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\libvj">
+      <UniqueIdentifier>{a1b2c3d4-e5f6-4789-a012-3456789abcde}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

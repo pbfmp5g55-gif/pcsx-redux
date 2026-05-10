@@ -147,6 +147,13 @@
     <ClCompile Include="..\..\src\core\gpu.cc" />
     <ClCompile Include="..\..\src\core\gpulogger.cc" />
     <ClCompile Include="..\..\src\core\vj_bridge.cc" />
+    <ClCompile Include="..\..\third_party\libvj\vj\src\DebugOverlay.cpp" />
+    <ClCompile Include="..\..\third_party\libvj\vj\src\DepthDelayQueue.cpp" />
+    <ClCompile Include="..\..\third_party\libvj\vj\src\MidiController.cpp" />
+    <ClCompile Include="..\..\third_party\libvj\vj\src\PrimitiveContext.cpp" />
+    <ClCompile Include="..\..\third_party\libvj\vj\src\PrimitiveInterceptor.cpp" />
+    <ClCompile Include="..\..\third_party\libvj\vj\src\RandomController.cpp" />
+    <ClCompile Include="..\..\third_party\libvj\vj\src\SafetyLimiter.cpp" />
     <ClCompile Include="..\..\src\core\kernel.cc" />
     <ClCompile Include="..\..\src\core\kernellog.cc" />
     <ClCompile Include="..\..\src\core\luaiso.cc" />

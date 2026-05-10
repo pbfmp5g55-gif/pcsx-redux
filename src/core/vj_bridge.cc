@@ -87,8 +87,25 @@ void vjLog(const char* fmt, ...) {
 // and this never escapes the call.
 thread_local std::function<void(const ::vj::Primitive&)> g_currentSubmit;
 
+// Pull a float [0,1]-ish param from env. Empty/unset -> default (current value).
+float envFloat(const char* name, float def) {
+    const char* v = std::getenv(name);
+    if (!v || !*v) return def;
+    return std::strtof(v, nullptr);
+}
+
 void ensureInit() {
     std::call_once(g_initFlag, []() {
+        // Allow live tuning without rebuild via env vars. All default to 0.
+        g_params.master   = envFloat("VJ_MASTER",   g_params.master);
+        g_params.chance   = envFloat("VJ_CHANCE",   g_params.chance);
+        g_params.geometry = envFloat("VJ_GEOMETRY", g_params.geometry);
+        g_params.texture  = envFloat("VJ_TEXTURE",  g_params.texture);
+        g_params.missing  = envFloat("VJ_MISSING",  g_params.missing);
+        g_params.color    = envFloat("VJ_COLOR",    g_params.color);
+        g_params.depth    = envFloat("VJ_DEPTH",    g_params.depth);
+        g_params.chaos    = envFloat("VJ_CHAOS",    g_params.chaos);
+
         g_interceptor = std::make_unique<::vj::PrimitiveInterceptor>();
         g_interceptor->setSubmitCallback([](const ::vj::Primitive& p) {
             if (g_currentSubmit) g_currentSubmit(p);
@@ -107,9 +124,12 @@ void ensureInit() {
             });
         }
 
-        vjLog("[VJ] Phase 4 bridge live (master=%.2f depth=%.2f, "
+        vjLog("[VJ] Phase 4 bridge live (master=%.2f chance=%.2f geom=%.2f "
+              "tex=%.2f miss=%.2f color=%.2f depth=%.2f chaos=%.2f, "
               "depth-delay %s, listener %s)\n",
-              g_params.master, g_params.depth,
+              g_params.master, g_params.chance, g_params.geometry,
+              g_params.texture, g_params.missing, g_params.color,
+              g_params.depth, g_params.chaos,
               g_params.depth > 0.001f ? "ON" : "OFF",
               g_listener ? "installed" : "MISSING (g_system unavailable)");
     });

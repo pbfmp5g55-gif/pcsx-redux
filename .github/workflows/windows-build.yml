@@ -38,17 +38,19 @@ jobs:
         # references in individual vcxproj files (tracy/uriparser). The GitHub-hosted
         # windows-2022 runner only ships v143; v145 lives on Azure DevOps' vs2026 image.
         #
-        # /t:pcsx_redux;pcsx_wrapper limits the build to the two app targets we ship
-        # (the renamed pcsx-redux.main + pcsx-redux.exe wrapper) plus their transitive
-        # ProjectReferences (core, gui, fmt, ...). The hyphenated sln names are escaped
-        # to underscores per msbuild target naming rules.
+        # /t:pcsx_redux:Build;pcsx_wrapper:Build limits the build to the two app
+        # targets we ship (the renamed pcsx-redux.main + pcsx-redux.exe wrapper) plus
+        # their transitive ProjectReferences (core, gui, fmt, ...). The hyphenated sln
+        # project names are escaped to underscores per msbuild rules, and ":Build" is
+        # required so msbuild interprets them as project specifiers rather than as
+        # MSBuild target verbs (verb-only "/t:pcsx_redux" produced MSB4057 in CI #4).
         # Test projects (testsupport / pcsxrunner / memoryleakdetector) are skipped:
         # they hit LNK1561 under ClangCL+v143 because the v140 googletest NuGet's
         # auto-link logic for gtest_main does not match this toolset combination.
         # Upstream's Azure pipeline runs on windows-2025-vs2026 (v145 ClangCL) and
         # the auto-link succeeds there. For our Phase 3 verification we only need the
         # emulator binary, not the test suite.
-        run: msbuild $env:SOLUTION "/t:pcsx_redux;pcsx_wrapper" /p:Configuration=$env:CONFIG /p:Platform=$env:PLATFORM /p:PlatformToolset=v143 /m
+        run: msbuild $env:SOLUTION "/t:pcsx_redux:Build;pcsx_wrapper:Build" /p:Configuration=$env:CONFIG /p:Platform=$env:PLATFORM /p:PlatformToolset=v143 /m
 
       - name: Stage binaries (rename wrapper to main entry)
         shell: pwsh

@@ -130,6 +130,9 @@
     <ClCompile Include="..\..\src\core\vj_bridge.cc">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\third_party\libvj\vj\src\AutoMode.cpp">
+      <Filter>Source Files\libvj</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\third_party\libvj\vj\src\DebugOverlay.cpp">
       <Filter>Source Files\libvj</Filter>
     </ClCompile>

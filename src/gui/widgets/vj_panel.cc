@@ -50,6 +50,20 @@ void VJPanel::draw(const char* title) {
 
     ImGui::Separator();
 
+    auto& f = p.filter;
+    ImGui::TextUnformatted("Filter (which prims get glitched — AND of enabled axes)");
+    ImGui::Checkbox("Textured only", &f.texturedOnly);
+    ImGui::SliderFloat("Min area", &f.minArea, 0.0f, 50000.0f, "%.0f");
+    ImGui::SliderFloat("Max area", &f.maxArea, 0.0f, 50000.0f, "%.0f");
+    float region[4] = {f.regionX0, f.regionY0, f.regionX1, f.regionY1};
+    if (ImGui::SliderFloat4("Region X0/Y0/X1/Y1", region, 0.0f, 1024.0f, "%.0f")) {
+        f.regionX0 = region[0]; f.regionY0 = region[1];
+        f.regionX1 = region[2]; f.regionY1 = region[3];
+    }
+    ImGui::SliderInt("Every N", &f.everyN, 0, 16);
+
+    ImGui::Separator();
+
     if (ImGui::Button("Reset all")) {
         p = ::vj::Params{};
         a = ::vj::AutoModeParams{};

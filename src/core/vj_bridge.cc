@@ -94,6 +94,12 @@ float envFloat(const char* name, float def) {
     return std::strtof(v, nullptr);
 }
 
+int envInt(const char* name, int def) {
+    const char* v = std::getenv(name);
+    if (!v || !*v) return def;
+    return static_cast<int>(std::strtol(v, nullptr, 10));
+}
+
 void ensureInit() {
     std::call_once(g_initFlag, []() {
         // Allow live tuning without rebuild via env vars. All default to 0.
@@ -105,6 +111,15 @@ void ensureInit() {
         g_params.color    = envFloat("VJ_COLOR",    g_params.color);
         g_params.depth    = envFloat("VJ_DEPTH",    g_params.depth);
         g_params.chaos    = envFloat("VJ_CHAOS",    g_params.chaos);
+
+        g_params.filter.texturedOnly = envInt("VJ_FILTER_TEXTURED", 0) != 0;
+        g_params.filter.minArea      = envFloat("VJ_FILTER_MIN_AREA", 0.0f);
+        g_params.filter.maxArea      = envFloat("VJ_FILTER_MAX_AREA", 0.0f);
+        g_params.filter.regionX0     = envFloat("VJ_FILTER_REGION_X0", 0.0f);
+        g_params.filter.regionY0     = envFloat("VJ_FILTER_REGION_Y0", 0.0f);
+        g_params.filter.regionX1     = envFloat("VJ_FILTER_REGION_X1", 0.0f);
+        g_params.filter.regionY1     = envFloat("VJ_FILTER_REGION_Y1", 0.0f);
+        g_params.filter.everyN       = envInt("VJ_FILTER_EVERY_N", 0);
 
         g_interceptor = std::make_unique<::vj::PrimitiveInterceptor>();
         g_interceptor->setSubmitCallback([](const ::vj::Primitive& p) {
@@ -132,6 +147,14 @@ void ensureInit() {
               g_params.depth, g_params.chaos,
               g_params.depth > 0.001f ? "ON" : "OFF",
               g_listener ? "installed" : "MISSING (g_system unavailable)");
+
+        vjLog("[VJ] filter (texturedOnly=%d minArea=%.0f maxArea=%.0f "
+              "region=[%.0f,%.0f]-[%.0f,%.0f] everyN=%d)\n",
+              g_params.filter.texturedOnly ? 1 : 0,
+              g_params.filter.minArea, g_params.filter.maxArea,
+              g_params.filter.regionX0, g_params.filter.regionY0,
+              g_params.filter.regionX1, g_params.filter.regionY1,
+              g_params.filter.everyN);
     });
 }
 

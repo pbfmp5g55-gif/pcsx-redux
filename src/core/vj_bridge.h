@@ -22,8 +22,11 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <string>
+#include <vector>
 
 #include "core/gpu.h"
+#include "vj/MidiController.h"
 #include "vj/Params.h"
 #include "vj/Primitive.h"
 
@@ -41,6 +44,43 @@ void setEnabled(bool enabled);
 // Per-frame primitive counter — last fully-completed frame's total. Mainly
 // useful for HUD-style overlays in the GUI.
 unsigned long long lastFramePrimitiveCount();
+
+// MIDI control — wraps a vj::RtMidiController. When midi::isEnabled() and a
+// port is open, the 8 effect-axis fields of params() are overwritten from
+// MIDI CCs on every VSync (filter / auto-mode configs are left intact).
+namespace midi {
+
+bool isEnabled();
+void setEnabled(bool enabled);
+
+// Snapshot of available MIDI input ports (calls RtMidi::getPortCount() under
+// the hood). Safe to call from the UI thread.
+std::vector<std::string> listPorts();
+
+// Close any currently-open port, then open the given index. -1 closes only.
+// Returns true on success. The current CC->axis mapping is preserved across
+// open/close cycles.
+bool openPort(int portIndex);
+
+// -1 if no port is open.
+int openedPort();
+std::string openedPortName();
+
+// Per-axis CC mapping. Defaults to 20..27 (see vj/MidiController.h `cc::`).
+int getAxisCC(::vj::Axis axis);
+void setAxisCC(::vj::Axis axis, int cc);
+
+// CC number of the most recently received Control Change message, or -1.
+// Used for the "Learn" UI flow: clear -> wait for user to move a control ->
+// read.
+int lastReceivedCC();
+void clearLastReceivedCC();
+
+// Current value of the given CC (0..127) or -1 if it has not been touched
+// since the port was opened.
+int getCC(int cc);
+
+}  // namespace midi
 
 namespace detail {
 // Submits prim into the libvj interceptor. If the interceptor approves (or

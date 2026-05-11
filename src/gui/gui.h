@@ -59,6 +59,7 @@
 #include "gui/widgets/shader-editor.h"
 #include "gui/widgets/sio1.h"
 #include "gui/widgets/ram-viewer.h"
+#include "gui/widgets/midi_config_panel.h"
 #include "gui/widgets/vj_panel.h"
 #include "gui/widgets/vram-viewer.h"
 #include "imgui.h"
@@ -434,6 +435,9 @@ class GUI final : public UI {
 
     bool m_showVJ = false;
     Widgets::VJPanel m_vjPanel{m_showVJ};
+
+    bool m_showMidiConfig = false;
+    Widgets::MidiConfigPanel m_midiConfigPanel{m_showMidiConfig};
 
     EventBus::Listener m_listener;
 

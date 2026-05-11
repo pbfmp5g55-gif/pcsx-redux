@@ -21,15 +21,21 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <string>
+#include <vector>
 
 #include "core/system.h"
 #include "support/eventbus.h"
 #include "vj/AutoMode.h"
+#include "vj/MidiController.h"
 #include "vj/Params.h"
 #include "vj/PrimitiveInterceptor.h"
+#include "vj/RtMidiController.h"
 
 namespace PCSX {
 namespace vj {
@@ -51,6 +57,14 @@ std::unique_ptr<EventBus::Listener> g_listener;
 
 // Auto mode (LFO modulation). Disabled by default; enable with VJ_AUTO=1.
 ::vj::AutoModeParams g_auto;
+
+// MIDI state. g_midi is created/destroyed at runtime when the user opens or
+// closes a port from the UI, so all access is guarded by g_midiMutex. The
+// CC->axis mapping is kept in g_midiMapping so it survives across reopens.
+std::mutex g_midiMutex;
+std::unique_ptr<::vj::RtMidiController> g_midi;
+::vj::CCMapping g_midiMapping;
+std::atomic<bool> g_midiEnabled{false};
 
 uint64_t g_frameCounter = 0;
 uint64_t g_thisFramePrims = 0;
@@ -129,6 +143,23 @@ void ensureInit() {
         g_auto.depth   = envFloat("VJ_AUTO_DEPTH", g_auto.depth);
         g_auto.rate    = envFloat("VJ_AUTO_RATE",  g_auto.rate);
 
+        // MIDI seed. Both VJ_MIDI_ENABLED=1 and a valid VJ_MIDI_PORT are
+        // required to actually open a port at startup. The UI can change both
+        // at runtime via the midi::* API.
+        g_midiEnabled.store(envInt("VJ_MIDI_ENABLED", 0) != 0);
+        const int seedMidiPort = envInt("VJ_MIDI_PORT", -1);
+        if (seedMidiPort >= 0) {
+            try {
+                g_midi = std::make_unique<::vj::RtMidiController>(
+                    static_cast<unsigned int>(seedMidiPort));
+                g_midi->setMapping(g_midiMapping);
+                vjLog("[VJ] MIDI port %d opened: %s\n", seedMidiPort,
+                      g_midi->portName().c_str());
+            } catch (const std::exception& e) {
+                vjLog("[VJ] MIDI port %d open failed: %s\n", seedMidiPort, e.what());
+            }
+        }
+
         g_interceptor = std::make_unique<::vj::PrimitiveInterceptor>();
         g_interceptor->setSubmitCallback([](const ::vj::Primitive& p) {
             if (g_currentSubmit) g_currentSubmit(p);
@@ -145,6 +176,22 @@ void ensureInit() {
                 g_lastFramePrims = g_thisFramePrims;
                 g_thisFramePrims = 0;
                 g_frameCounter++;
+                // If MIDI is active, overwrite the 8 effect-axis fields from
+                // the latest CC snapshot. filter and auto-mode are untouched.
+                if (g_midiEnabled.load()) {
+                    std::lock_guard<std::mutex> lk(g_midiMutex);
+                    if (g_midi) {
+                        const auto mp = g_midi->buildParams();
+                        g_params.master   = mp.master;
+                        g_params.chance   = mp.chance;
+                        g_params.geometry = mp.geometry;
+                        g_params.texture  = mp.texture;
+                        g_params.missing  = mp.missing;
+                        g_params.color    = mp.color;
+                        g_params.depth    = mp.depth;
+                        g_params.chaos    = mp.chaos;
+                    }
+                }
                 g_interceptor->beginFrame(
                     ::vj::applyAutoMode(g_params, g_auto, static_cast<int>(g_frameCounter)),
                     static_cast<int>(g_lastFramePrims));
@@ -170,6 +217,11 @@ void ensureInit() {
 
         vjLog("[VJ] auto (enabled=%d depth=%.2f rate=%.2f)\n",
               g_auto.enabled ? 1 : 0, g_auto.depth, g_auto.rate);
+
+        vjLog("[VJ] midi (enabled=%d port=%d name=%s)\n",
+              g_midiEnabled.load() ? 1 : 0,
+              g_midi ? static_cast<int>(g_midi->portIndex()) : -1,
+              g_midi ? g_midi->portName().c_str() : "(none)");
     });
 }
 
@@ -221,6 +273,84 @@ bool intercept(::vj::Primitive& prim,
 }
 
 }  // namespace detail
+
+namespace midi {
+
+bool isEnabled() { return g_midiEnabled.load(); }
+
+void setEnabled(bool e) {
+    ensureInit();
+    g_midiEnabled.store(e);
+}
+
+std::vector<std::string> listPorts() {
+    ensureInit();
+    return ::vj::RtMidiController::listPorts();
+}
+
+bool openPort(int portIndex) {
+    ensureInit();
+    std::lock_guard<std::mutex> lk(g_midiMutex);
+    const ::vj::CCMapping saved = g_midi ? g_midi->mapping() : g_midiMapping;
+    g_midi.reset();
+    if (portIndex < 0) {
+        g_midiMapping = saved;
+        vjLog("[VJ] MIDI port closed\n");
+        return true;
+    }
+    try {
+        g_midi = std::make_unique<::vj::RtMidiController>(
+            static_cast<unsigned int>(portIndex));
+        g_midi->setMapping(saved);
+        g_midiMapping = saved;
+        vjLog("[VJ] MIDI port %d opened: %s\n", portIndex,
+              g_midi->portName().c_str());
+        return true;
+    } catch (const std::exception& e) {
+        vjLog("[VJ] MIDI port %d open failed: %s\n", portIndex, e.what());
+        return false;
+    }
+}
+
+int openedPort() {
+    std::lock_guard<std::mutex> lk(g_midiMutex);
+    return g_midi ? static_cast<int>(g_midi->portIndex()) : -1;
+}
+
+std::string openedPortName() {
+    std::lock_guard<std::mutex> lk(g_midiMutex);
+    return g_midi ? g_midi->portName() : std::string();
+}
+
+int getAxisCC(::vj::Axis axis) {
+    ensureInit();
+    std::lock_guard<std::mutex> lk(g_midiMutex);
+    return g_midi ? g_midi->axisCC(axis) : g_midiMapping[axis];
+}
+
+void setAxisCC(::vj::Axis axis, int cc) {
+    ensureInit();
+    std::lock_guard<std::mutex> lk(g_midiMutex);
+    g_midiMapping[axis] = cc;
+    if (g_midi) g_midi->setAxisCC(axis, cc);
+}
+
+int lastReceivedCC() {
+    std::lock_guard<std::mutex> lk(g_midiMutex);
+    return g_midi ? g_midi->lastReceivedCC() : -1;
+}
+
+void clearLastReceivedCC() {
+    std::lock_guard<std::mutex> lk(g_midiMutex);
+    if (g_midi) g_midi->clearLastReceivedCC();
+}
+
+int getCC(int cc) {
+    std::lock_guard<std::mutex> lk(g_midiMutex);
+    return g_midi ? g_midi->getCC(cc) : -1;
+}
+
+}  // namespace midi
 
 }  // namespace vj
 }  // namespace PCSX

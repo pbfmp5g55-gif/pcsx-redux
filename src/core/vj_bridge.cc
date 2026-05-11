@@ -27,6 +27,7 @@
 
 #include "core/system.h"
 #include "support/eventbus.h"
+#include "vj/AutoMode.h"
 #include "vj/Params.h"
 #include "vj/PrimitiveInterceptor.h"
 
@@ -47,6 +48,9 @@ std::unique_ptr<EventBus::Listener> g_listener;
 // Phase 4 MVP defaults: every term zero → libvj passes every primitive through
 // unmodified (no behaviour change vs. an unhooked build).
 ::vj::Params g_params;
+
+// Auto mode (LFO modulation). Disabled by default; enable with VJ_AUTO=1.
+::vj::AutoModeParams g_auto;
 
 uint64_t g_frameCounter = 0;
 uint64_t g_thisFramePrims = 0;
@@ -121,11 +125,17 @@ void ensureInit() {
         g_params.filter.regionY1     = envFloat("VJ_FILTER_REGION_Y1", 0.0f);
         g_params.filter.everyN       = envInt("VJ_FILTER_EVERY_N", 0);
 
+        g_auto.enabled = envInt("VJ_AUTO", 0) != 0;
+        g_auto.depth   = envFloat("VJ_AUTO_DEPTH", g_auto.depth);
+        g_auto.rate    = envFloat("VJ_AUTO_RATE",  g_auto.rate);
+
         g_interceptor = std::make_unique<::vj::PrimitiveInterceptor>();
         g_interceptor->setSubmitCallback([](const ::vj::Primitive& p) {
             if (g_currentSubmit) g_currentSubmit(p);
         });
-        g_interceptor->beginFrame(g_params, 0);
+        g_interceptor->beginFrame(
+            ::vj::applyAutoMode(g_params, g_auto, static_cast<int>(g_frameCounter)),
+            0);
 
         if (g_system && g_system->m_eventBus) {
             g_listener = std::make_unique<EventBus::Listener>(g_system->m_eventBus);
@@ -135,7 +145,9 @@ void ensureInit() {
                 g_lastFramePrims = g_thisFramePrims;
                 g_thisFramePrims = 0;
                 g_frameCounter++;
-                g_interceptor->beginFrame(g_params, static_cast<int>(g_lastFramePrims));
+                g_interceptor->beginFrame(
+                    ::vj::applyAutoMode(g_params, g_auto, static_cast<int>(g_frameCounter)),
+                    static_cast<int>(g_lastFramePrims));
             });
         }
 
@@ -155,6 +167,9 @@ void ensureInit() {
               g_params.filter.regionX0, g_params.filter.regionY0,
               g_params.filter.regionX1, g_params.filter.regionY1,
               g_params.filter.everyN);
+
+        vjLog("[VJ] auto (enabled=%d depth=%.2f rate=%.2f)\n",
+              g_auto.enabled ? 1 : 0, g_auto.depth, g_auto.rate);
     });
 }
 

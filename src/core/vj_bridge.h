@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "core/gpu.h"
+#include "vj/AutoMode.h"
 #include "vj/MidiController.h"
 #include "vj/Params.h"
 #include "vj/Primitive.h"
@@ -40,6 +41,10 @@ void setEnabled(bool enabled);
 // on the next vj::PrimitiveInterceptor::beginFrame(). Defaults are all zero
 // (passthrough); env vars (VJ_MASTER / VJ_GEOMETRY / ...) seed them at startup.
 ::vj::Params& params();
+
+// Live AutoMode (LFO modulation) config. enabled=false (default) passes Params
+// through unchanged. Seeded by VJ_AUTO / VJ_AUTO_DEPTH / VJ_AUTO_RATE.
+::vj::AutoModeParams& autoParams();
 
 // Per-frame primitive counter — last fully-completed frame's total. Mainly
 // useful for HUD-style overlays in the GUI.

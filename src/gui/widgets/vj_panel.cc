@@ -5,6 +5,7 @@
 #include "gui/widgets/vj_panel.h"
 
 #include "core/vj_bridge.h"
+#include "vj/AutoMode.h"
 #include "vj/Params.h"
 
 namespace PCSX {
@@ -41,8 +42,17 @@ void VJPanel::draw(const char* title) {
 
     ImGui::Separator();
 
+    auto& a = ::PCSX::vj::autoParams();
+    ImGui::TextUnformatted("Auto-Mode (per-axis sine LFO)");
+    ImGui::Checkbox("Auto enabled", &a.enabled);
+    ImGui::SliderFloat("Auto depth", &a.depth, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Auto rate",  &a.rate,  0.1f, 4.0f, "%.2f");
+
+    ImGui::Separator();
+
     if (ImGui::Button("Reset all")) {
         p = ::vj::Params{};
+        a = ::vj::AutoModeParams{};
     }
     ImGui::SameLine();
     if (ImGui::Button("Demo: subtle")) {

@@ -235,6 +235,11 @@ void setEnabled(bool e) { g_enabled.store(e); }
     return g_params;
 }
 
+::vj::AutoModeParams& autoParams() {
+    ensureInit();
+    return g_auto;
+}
+
 unsigned long long lastFramePrimitiveCount() {
     return static_cast<unsigned long long>(g_lastFramePrims);
 }

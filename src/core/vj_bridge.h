@@ -205,6 +205,21 @@ inline bool onPrimitive(PCSX::GPU::Poly<sh, shape, t, b, m>& p) {
     prim.blendMode = (b == PCSX::GPU::Blend::Semi)
                          ? ::vj::BlendMode::Average
                          : ::vj::BlendMode::Opaque;
+    // Pack the GPU's TPage and CLUT registers into hostTag so the mixer
+    // (or any other consumer) can locate the texture page in VRAM and
+    // the palette for 4bpp/8bpp CLUT sprites.
+    //   bits 0..15   = clutraw (16 bits)  -- clutX/16 in bits 0..5,
+    //                                        clutY    in bits 6..14
+    //   bits 16..23  = reserved
+    //   bits 24..39  = tpage.raw low 16 bits
+    //                                     -- TPageX/64 in bits 0..3,
+    //                                        TPageY*256 in bit 4,
+    //                                        semi-transparency 5..6,
+    //                                        TP (bpp) 7..8
+    if constexpr (textured) {
+        prim.hostTag = (static_cast<uint64_t>(p.clutraw) & 0xFFFFu) |
+                       ((static_cast<uint64_t>(p.tpage.raw) & 0xFFFFu) << 24);
+    }
     prim.vertices.resize(vc);
     for (unsigned i = 0; i < vc; ++i) {
         auto& vv = prim.vertices[i];

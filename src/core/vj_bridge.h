@@ -178,6 +178,14 @@ inline bool onPrimitive(PCSX::GPU::Poly<sh, shape, t, b, m>& p) {
     ::vj::Primitive prim;
     prim.kind = quad ? ::vj::PrimitiveKind::Quad : ::vj::PrimitiveKind::Triangle;
     prim.textured = textured;
+    // PS1 semi-transparency = the GP0 command bit; the ABR sub-mode lives
+    // in TPage and is not part of this template's parameters. For now we
+    // collapse all semi-transparent primitives to Average mode (mode 0,
+    // the most common case). Future work: pull ABR out of g_emulator's
+    // last TPage register and pick the right sub-mode.
+    prim.blendMode = (b == PCSX::GPU::Blend::Semi)
+                         ? ::vj::BlendMode::Average
+                         : ::vj::BlendMode::Opaque;
     prim.vertices.resize(vc);
     for (unsigned i = 0; i < vc; ++i) {
         auto& vv = prim.vertices[i];

@@ -143,6 +143,51 @@ void IpcRingWriter::close() {
     m_dataSize = 0;
 }
 
+void IpcRingWriter::stagePendingRecord(IpcRecordType type, const void* payload, size_t payloadLen) {
+    const size_t recBytes = kRecHeaderBytes + payloadLen;
+    // If this frame already overflowed the pending cap once, mark it doomed
+    // and stop staging records. flushPendingFrame() will drop the whole
+    // frame at FrameEnd. (Without this flag a 'small' FrameEnd record
+    // arriving after a doomed prim would otherwise commit a torn frame.)
+    if (m_pendingFrameDoomed) return;
+    if (m_pendingFrame.size() + recBytes > m_dataSize) {
+        m_pendingFrameDoomed = true;
+        return;
+    }
+    const size_t oldSize = m_pendingFrame.size();
+    m_pendingFrame.resize(oldSize + recBytes);
+    uint8_t* dst = m_pendingFrame.data() + oldSize;
+    const uint32_t lenWire = static_cast<uint32_t>(recBytes);
+    std::memcpy(dst, &lenWire, sizeof(lenWire));
+    dst[4] = static_cast<uint8_t>(type);
+    if (payloadLen > 0) std::memcpy(dst + kRecHeaderBytes, payload, payloadLen);
+}
+
+bool IpcRingWriter::flushPendingFrame() {
+    if (m_pendingFrameDoomed) {
+        m_header->dropped += 1;
+        m_pendingFrame.clear();
+        m_pendingFrameDoomed = false;
+        return false;
+    }
+    if (m_pendingFrame.empty()) return true;
+    const size_t total = m_pendingFrame.size();
+    const uint64_t writeOff = m_header->writeOffset;
+    const uint64_t readOff  = m_header->readOffset;
+    if (availableForWriter(writeOff, readOff, m_dataSize) < total) {
+        m_header->dropped += 1;
+        m_pendingFrame.clear();
+        return false;
+    }
+    copyInWrap(m_data, static_cast<size_t>(writeOff), m_dataSize,
+               m_pendingFrame.data(), total);
+    // Single atomic-ish store of the new writeOffset — reader sees either
+    // the full frame or none of it.
+    m_header->writeOffset = (writeOff + total) % m_dataSize;
+    m_pendingFrame.clear();
+    return true;
+}
+
 bool IpcRingWriter::writeRecord(IpcRecordType type, const void* payload, size_t payloadLen) {
     if (!m_header) return false;
     const size_t recBytes = kRecHeaderBytes + payloadLen;
@@ -151,6 +196,16 @@ bool IpcRingWriter::writeRecord(IpcRecordType type, const void* payload, size_t 
         m_header->dropped += 1;
         return false;
     }
+
+    if (m_frameBufferEnabled) {
+        stagePendingRecord(type, payload, payloadLen);
+        if (type == IpcRecordType::FrameEnd) {
+            return flushPendingFrame();
+        }
+        return true;
+    }
+
+    // Immediate-write mode (selftest).
     const uint64_t writeOff = m_header->writeOffset;
     const uint64_t readOff  = m_header->readOffset;
     if (availableForWriter(writeOff, readOff, m_dataSize) < recBytes) {
@@ -168,9 +223,6 @@ bool IpcRingWriter::writeRecord(IpcRecordType type, const void* payload, size_t 
                    m_dataSize,
                    static_cast<const uint8_t*>(payload), payloadLen);
     }
-    // Publish the new writeOffset last — on x86 with atomic uint64 stores
-    // this is enough for an in-process SPSC selftest; cross-process on
-    // x86 also works for naturally-aligned stores.
     m_header->writeOffset = (writeOff + recBytes) % m_dataSize;
     return true;
 }

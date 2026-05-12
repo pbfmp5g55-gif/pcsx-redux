@@ -30,7 +30,10 @@
 #include <vector>
 
 #include "core/system.h"
+#include "core/psxemulator.h"
+#include "core/gpu.h"
 #include "support/eventbus.h"
+#include "support/slice.h"
 #include "core/vj_ipc_ring.h"
 #include "vj/AutoMode.h"
 #include "vj/FilterPresetBank.h"
@@ -676,6 +679,39 @@ bool start(const std::string& name) {
     }
     g_liveWriter = std::move(w);
     g_liveName   = name;
+
+    // Snapshot the current PS1 VRAM into the live ring as four 1024x128
+    // VRAMUpload records. Without this the mixer never sees any texture /
+    // palette data the game uploaded before live IPC was enabled (e.g.
+    // Quake uploads its 8bpp palette once at level load, so the mixer's
+    // Clean CLUT mode previously got an all-zero palette and discarded
+    // every textured fragment).
+    //
+    // Stream temporarily reverts to record-level commit because there's no
+    // FrameEnd surrounding these records (they pre-date the next GPU frame
+    // hook). They're still ordered: the reader sees them before any frame
+    // primitives.
+    if (PCSX::g_emulator && PCSX::g_emulator->m_gpu) {
+        PCSX::Slice slice = PCSX::g_emulator->m_gpu->getVRAM(
+            PCSX::GPU::Ownership::ACQUIRE);
+        const uint16_t* vram = static_cast<const uint16_t*>(slice.data<void>());
+        if (vram) {
+            g_liveWriter->setFrameBuffering(false);
+            constexpr int kStripeH = 128;
+            for (int y = 0; y < 512; y += kStripeH) {
+                packUploadForLive(0, y, 1024, kStripeH,
+                                  vram + static_cast<size_t>(y) * 1024,
+                                  g_livePackBuf);
+                g_liveWriter->writeRecord(vjmix::IpcRecordType::VRAMUpload,
+                                          g_livePackBuf.data(),
+                                          g_livePackBuf.size());
+            }
+            g_liveWriter->setFrameBuffering(true);
+            vjLog("[VJ] live: VRAM snapshot sent (4 stripes of 1024x%d)\n",
+                  kStripeH);
+        }
+    }
+
     vjLog("[VJ] live: ring opened (%s)\n", name.c_str());
     return true;
 }

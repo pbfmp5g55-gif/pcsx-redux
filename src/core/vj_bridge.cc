@@ -146,41 +146,10 @@ size_t packUploadForLive(int x, int y, int w, int h, const uint16_t* data,
     return out.size();
 }
 
-void snapshotVRAMToLive_locked() {
-    if (!g_liveWriter) return;
-    if (!PCSX::g_emulator || !PCSX::g_emulator->m_gpu) return;
-    PCSX::Slice slice = PCSX::g_emulator->m_gpu->getVRAM(
-        PCSX::GPU::Ownership::ACQUIRE);
-    const uint16_t* vram = static_cast<const uint16_t*>(slice.data<void>());
-    if (!vram) return;
-    g_liveWriter->setFrameBuffering(false);
-    constexpr int kStripeH = 128;
-    for (int y = 0; y < 512; y += kStripeH) {
-        packUploadForLive(0, y, 1024, kStripeH,
-                          vram + static_cast<size_t>(y) * 1024,
-                          g_livePackBuf);
-        g_liveWriter->writeRecord(vjmix::IpcRecordType::VRAMUpload,
-                                  g_livePackBuf.data(),
-                                  g_livePackBuf.size());
-    }
-    g_liveWriter->setFrameBuffering(true);
-}
-
 uint64_t g_frameCounter = 0;
 uint64_t g_thisFramePrims = 0;
 uint64_t g_lastFramePrims = 0;
 constexpr uint64_t kLogEvery = 4096;
-
-// How often (in VSync ticks) to retransmit the entire VRAM to the mixer.
-// Games like Jet Ace swap palettes per scene; without periodic snapshots
-// the mixer's mirror falls behind and Clean CLUT goes black. 60 frames
-// = roughly 1 second at 60 fps.
-std::atomic<int> g_liveSnapshotEveryNFrames{60};
-
-// Forward decl — defined alongside packUploadForLive; called from the VSync
-// listener inside ensureInit() so live::start() and the periodic refresh
-// share one implementation. Caller holds g_recordMutex.
-void snapshotVRAMToLive_locked();
 
 // pcsx-redux.main is built as WINDOWS_GUI; the CRT does not connect FILE*
 // stderr to a usable handle there, so fprintf(stderr,...) silently drops.
@@ -393,14 +362,6 @@ void ensureInit() {
                         g_liveWriter->writeRecord(vjmix::IpcRecordType::FrameEnd,
                                                   &fi, sizeof(fi));
                         g_liveWriter->heartbeat();
-                        // Periodic full-VRAM snapshot so the mixer's VRAM
-                        // mirror keeps up with transient palette / texture
-                        // updates (Jet Ace etc.). Default cadence ~1 s.
-                        const int every = g_liveSnapshotEveryNFrames.load();
-                        if (every > 0 &&
-                            (g_frameCounter % static_cast<uint64_t>(every)) == 0) {
-                            snapshotVRAMToLive_locked();
-                        }
                     }
                     if (g_recordWriter) {
                         const int recCount =
@@ -719,12 +680,37 @@ bool start(const std::string& name) {
     g_liveWriter = std::move(w);
     g_liveName   = name;
 
-    // Initial VRAM snapshot so the mixer sees palette / texture state that
-    // was uploaded before live IPC was on. Repeated periodically from the
-    // VSync listener below, so games that swap palettes per scene stay in
-    // sync on the mixer side as well.
-    snapshotVRAMToLive_locked();
-    vjLog("[VJ] live: VRAM snapshot sent (init)\n");
+    // Snapshot the current PS1 VRAM into the live ring as four 1024x128
+    // VRAMUpload records. Without this the mixer never sees any texture /
+    // palette data the game uploaded before live IPC was enabled (e.g.
+    // Quake uploads its 8bpp palette once at level load, so the mixer's
+    // Clean CLUT mode previously got an all-zero palette and discarded
+    // every textured fragment).
+    //
+    // Stream temporarily reverts to record-level commit because there's no
+    // FrameEnd surrounding these records (they pre-date the next GPU frame
+    // hook). They're still ordered: the reader sees them before any frame
+    // primitives.
+    if (PCSX::g_emulator && PCSX::g_emulator->m_gpu) {
+        PCSX::Slice slice = PCSX::g_emulator->m_gpu->getVRAM(
+            PCSX::GPU::Ownership::ACQUIRE);
+        const uint16_t* vram = static_cast<const uint16_t*>(slice.data<void>());
+        if (vram) {
+            g_liveWriter->setFrameBuffering(false);
+            constexpr int kStripeH = 128;
+            for (int y = 0; y < 512; y += kStripeH) {
+                packUploadForLive(0, y, 1024, kStripeH,
+                                  vram + static_cast<size_t>(y) * 1024,
+                                  g_livePackBuf);
+                g_liveWriter->writeRecord(vjmix::IpcRecordType::VRAMUpload,
+                                          g_livePackBuf.data(),
+                                          g_livePackBuf.size());
+            }
+            g_liveWriter->setFrameBuffering(true);
+            vjLog("[VJ] live: VRAM snapshot sent (4 stripes of 1024x%d)\n",
+                  kStripeH);
+        }
+    }
 
     vjLog("[VJ] live: ring opened (%s)\n", name.c_str());
     return true;

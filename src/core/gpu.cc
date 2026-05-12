@@ -990,6 +990,7 @@ void PCSX::GPU::BlitRamVram::processWrite(Buffer &buf, Logged::Origin origin, ui
         m_state = READ_COMMAND;
         m_gpu->m_defaultProcessor.setActive();
         g_emulator->m_gpuLogger->addNode(*this, origin, origvalue, length);
+        PCSX::vj::onVRAMUpload(x, y, w, h, data.data<uint16_t>());
         m_gpu->partialUpdateVRAM(x, y, w, h, data.data<uint16_t>(), PartialUpdateVram::Synchronous);
     }
 }

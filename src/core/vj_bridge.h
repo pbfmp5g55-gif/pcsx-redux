@@ -126,6 +126,13 @@ std::string defaultBankPath();
 
 }  // namespace filter
 
+// Notify the VJ subsystem of a CPU->VRAM upload (PS1 GP0 0xA0 command).
+// The data points to w*h 16-bpp pixels in PS1 5/5/5/mask layout. When
+// recording is on, the upload is appended to the current frame's record
+// buffer; when not, this is a no-op. Hooked from gpu.cc's BlitRamVram
+// processWrite, right after the gpuLogger addNode.
+void onVRAMUpload(int x, int y, int w, int h, const uint16_t* data);
+
 // Recording — captures every libvj-observed primitive (the mutated, post-
 // interceptor copy that ends up on screen) into a vj::PrimitiveStream file.
 // Toggleable at runtime; one frame per VSync. The file holds whatever

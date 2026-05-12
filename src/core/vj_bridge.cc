@@ -85,6 +85,7 @@ std::atomic<int>  g_filterLastCC{-1};
 std::mutex                          g_recordMutex;
 std::unique_ptr<::vj::PrimitiveStreamWriter> g_recordWriter;
 std::vector<::vj::Primitive>        g_recordBuffer;
+std::vector<::vj::VRAMUpload>       g_recordUploadBuffer;
 std::string                         g_recordPath;
 std::atomic<uint64_t>               g_recordedFrames{0};
 
@@ -294,12 +295,21 @@ void ensureInit() {
                 {
                     std::lock_guard<std::mutex> lk(g_recordMutex);
                     if (g_recordWriter) {
+                        const int recCount =
+                            static_cast<int>(g_recordUploadBuffer.size()) +
+                            static_cast<int>(g_recordBuffer.size());
                         g_recordWriter->beginFrame(
-                            static_cast<int>(g_frameCounter),
-                            static_cast<int>(g_recordBuffer.size()));
+                            static_cast<int>(g_frameCounter), recCount);
+                        // Uploads go first within a frame so the replay
+                        // side sees textures before the polygons that
+                        // sample them.
+                        for (const auto& u : g_recordUploadBuffer) {
+                            g_recordWriter->writeVRAMUpload(u);
+                        }
                         for (const auto& p : g_recordBuffer) {
                             g_recordWriter->writePrimitive(p);
                         }
+                        g_recordUploadBuffer.clear();
                         g_recordBuffer.clear();
                         g_recordedFrames.fetch_add(1);
                     }
@@ -341,6 +351,20 @@ void ensureInit() {
 
 bool isEnabled() { return g_enabled.load(); }
 void setEnabled(bool e) { g_enabled.store(e); }
+
+void onVRAMUpload(int x, int y, int w, int h, const uint16_t* data) {
+    if (w <= 0 || h <= 0 || !data) return;
+    std::lock_guard<std::mutex> lk(g_recordMutex);
+    if (!g_recordWriter) return;
+    ::vj::VRAMUpload u;
+    u.x = x;
+    u.y = y;
+    u.w = w;
+    u.h = h;
+    const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h);
+    u.data.assign(data, data + n);
+    g_recordUploadBuffer.push_back(std::move(u));
+}
 
 ::vj::Params& params() {
     ensureInit();  // make sure env-var seeding has happened before anyone reads
@@ -534,6 +558,7 @@ bool start(const std::string& path) {
     g_recordWriter = std::move(w);
     g_recordPath   = path;
     g_recordBuffer.clear();
+    g_recordUploadBuffer.clear();
     g_recordedFrames.store(0);
     vjLog("[VJ] record: started -> %s\n", path.c_str());
     return true;
@@ -549,6 +574,7 @@ void stop() {
           g_recordPath.c_str());
     g_recordPath.clear();
     g_recordBuffer.clear();
+    g_recordUploadBuffer.clear();
 }
 
 std::string currentPath() {

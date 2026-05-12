@@ -115,6 +115,15 @@ void setInterpolation(bool on);
 // since the port was opened. UI uses this to show "current knob position".
 int currentCC();
 
+// Save / load the preset bank to a binary file. Auto-load is attempted from
+// the configured default path on first init, so a previously-saved bank
+// survives across emulator restarts.
+bool saveBank(const std::string& path);
+bool loadBank(const std::string& path);
+
+// Default path used by the UI for save/load (and auto-load at startup).
+std::string defaultBankPath();
+
 }  // namespace filter
 
 // Recording — captures every libvj-observed primitive (the mutated, post-

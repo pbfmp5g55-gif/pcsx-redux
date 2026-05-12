@@ -213,6 +213,10 @@ void ensureInit() {
             setSlot(14, "Small+Center", f);
             f = {}; f.minArea = 20000.0f;  f.everyN = 2;
             setSlot(15, "Heavy BG",     f);
+
+            // Best-effort restore of a previously-saved bank from disk. If
+            // the file is missing or unreadable, the demo bank above stays.
+            g_filterBank.loadFrom("vj-presets.bin");
         }
         g_filterMidiEnabled.store(envInt("VJ_FILTER_PRESET_MIDI", 0) != 0);
         g_filterPresetCC.store(envInt("VJ_FILTER_PRESET_CC", 28));
@@ -489,6 +493,26 @@ bool interpolation() { return g_filterInterpolation.load(); }
 void setInterpolation(bool on) { g_filterInterpolation.store(on); }
 
 int currentCC() { return g_filterLastCC.load(); }
+
+bool saveBank(const std::string& path) {
+    ensureInit();
+    std::lock_guard<std::mutex> lk(g_filterBankMutex);
+    const bool ok = g_filterBank.saveTo(path);
+    vjLog("[VJ] filter: saveBank %s %s\n",
+          path.c_str(), ok ? "OK" : "FAILED");
+    return ok;
+}
+
+bool loadBank(const std::string& path) {
+    ensureInit();
+    std::lock_guard<std::mutex> lk(g_filterBankMutex);
+    const bool ok = g_filterBank.loadFrom(path);
+    vjLog("[VJ] filter: loadBank %s %s\n",
+          path.c_str(), ok ? "OK" : "FAILED");
+    return ok;
+}
+
+std::string defaultBankPath() { return "vj-presets.bin"; }
 
 }  // namespace filter
 

@@ -137,6 +137,27 @@ void FilterPresetPanel::draw(const char* title) {
         return;
     }
 
+    // Save / Load row.
+    {
+        static char status[64] = "";
+        const std::string defaultPath = ::PCSX::vj::filter::defaultBankPath();
+        if (ImGui::Button("Save bank")) {
+            const bool ok = ::PCSX::vj::filter::saveBank(defaultPath);
+            std::snprintf(status, sizeof(status), "Save %s: %s",
+                          defaultPath.c_str(), ok ? "OK" : "FAILED");
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reload bank")) {
+            const bool ok = ::PCSX::vj::filter::loadBank(defaultPath);
+            std::snprintf(status, sizeof(status), "Load %s: %s",
+                          defaultPath.c_str(), ok ? "OK" : "FAILED");
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("File: %s", defaultPath.c_str());
+        if (status[0]) ImGui::TextDisabled("%s", status);
+    }
+
+    ImGui::Separator();
     renderMidiSection();
     ImGui::Separator();
     renderSlotList();

@@ -154,6 +154,7 @@
     <ClCompile Include="..\..\third_party\libvj\vj\src\MidiController.cpp" />
     <ClCompile Include="..\..\third_party\libvj\vj\src\PrimitiveContext.cpp" />
     <ClCompile Include="..\..\third_party\libvj\vj\src\PrimitiveInterceptor.cpp" />
+    <ClCompile Include="..\..\third_party\libvj\vj\src\PrimitiveStream.cpp" />
     <ClCompile Include="..\..\third_party\libvj\vj\src\RandomController.cpp" />
     <ClCompile Include="..\..\third_party\libvj\vj\src\RtMidiController.cpp" />
     <ClCompile Include="..\..\third_party\libvj\vj\src\SafetyLimiter.cpp" />

@@ -148,6 +148,9 @@
     <ClCompile Include="..\..\third_party\libvj\vj\src\PrimitiveContext.cpp">
       <Filter>Source Files\libvj</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\third_party\libvj\vj\src\PrimitiveStream.cpp">
+      <Filter>Source Files\libvj</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\third_party\libvj\vj\src\PrimitiveInterceptor.cpp">
       <Filter>Source Files\libvj</Filter>
     </ClCompile>

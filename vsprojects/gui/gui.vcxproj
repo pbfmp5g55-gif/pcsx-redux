@@ -160,6 +160,7 @@
     <ClCompile Include="..\..\src\gui\widgets\sio1.cc" />
     <ClCompile Include="..\..\src\gui\widgets\filter_preset_panel.cc" />
     <ClCompile Include="..\..\src\gui\widgets\midi_config_panel.cc" />
+    <ClCompile Include="..\..\src\gui\widgets\recorder_panel.cc" />
     <ClCompile Include="..\..\src\gui\widgets\vj_panel.cc" />
     <ClCompile Include="..\..\src\gui\widgets\vram-viewer.cc" />
     <ClCompile Include="..\..\src\gui\widgets\zep-lua.cc" />
@@ -200,6 +201,7 @@
     <ClInclude Include="..\..\src\gui\widgets\sio1.h" />
     <ClInclude Include="..\..\src\gui\widgets\filter_preset_panel.h" />
     <ClInclude Include="..\..\src\gui\widgets\midi_config_panel.h" />
+    <ClInclude Include="..\..\src\gui\widgets\recorder_panel.h" />
     <ClInclude Include="..\..\src\gui\widgets\vj_panel.h" />
     <ClInclude Include="..\..\src\gui\widgets\vram-viewer.h" />
     <ClInclude Include="..\..\src\gui\widgets\zep-lua.h" />

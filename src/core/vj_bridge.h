@@ -31,6 +31,7 @@
 #include "vj/MidiController.h"
 #include "vj/Params.h"
 #include "vj/Primitive.h"
+#include "vj/PrimitiveStream.h"
 
 namespace PCSX {
 namespace vj {
@@ -115,6 +116,31 @@ void setInterpolation(bool on);
 int currentCC();
 
 }  // namespace filter
+
+// Recording — captures every libvj-observed primitive (the mutated, post-
+// interceptor copy that ends up on screen) into a vj::PrimitiveStream file.
+// Toggleable at runtime; one frame per VSync. The file holds whatever
+// primitives the GPU actually drew, including any glitch / filter / auto
+// effects applied by libvj.
+namespace record {
+
+bool isRecording();
+
+// Start recording to the given file path. Truncates any existing file.
+// Returns true on success.
+bool start(const std::string& path);
+
+// Close the file and stop recording. No-op if not currently recording.
+void stop();
+
+// Filesystem path of the currently-open recording, or empty string when
+// idle.
+std::string currentPath();
+
+// How many frames have been written since start().
+uint64_t recordedFrames();
+
+}  // namespace record
 
 namespace detail {
 // Submits prim into the libvj interceptor. If the interceptor approves (or

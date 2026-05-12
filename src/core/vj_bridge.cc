@@ -36,6 +36,7 @@
 #include "vj/MidiController.h"
 #include "vj/Params.h"
 #include "vj/PrimitiveInterceptor.h"
+#include "vj/PrimitiveStream.h"
 #include "vj/RtMidiController.h"
 
 namespace PCSX {
@@ -73,9 +74,19 @@ std::atomic<bool> g_midiEnabled{false};
 ::vj::FilterPresetBank g_filterBank;
 std::mutex g_filterBankMutex;
 std::atomic<bool> g_filterMidiEnabled{false};
-std::atomic<int>  g_filterPresetCC{28};  // sits past 8-axis defaults 20..27
+std::atomic<int>  g_filterPresetCC{28};
 std::atomic<bool> g_filterInterpolation{true};
 std::atomic<int>  g_filterLastCC{-1};
+
+// Recording state. g_recordBuffer accumulates primitives from onPrimitive()
+// within a frame; the VSync listener flushes it via the writer using a
+// known-up-front primitive count (PrimitiveStream requires the count at
+// beginFrame).
+std::mutex                          g_recordMutex;
+std::unique_ptr<::vj::PrimitiveStreamWriter> g_recordWriter;
+std::vector<::vj::Primitive>        g_recordBuffer;
+std::string                         g_recordPath;
+std::atomic<uint64_t>               g_recordedFrames{0};
 
 uint64_t g_frameCounter = 0;
 uint64_t g_thisFramePrims = 0;
@@ -227,6 +238,9 @@ void ensureInit() {
         g_interceptor = std::make_unique<::vj::PrimitiveInterceptor>();
         g_interceptor->setSubmitCallback([](const ::vj::Primitive& p) {
             if (g_currentSubmit) g_currentSubmit(p);
+            // Capture the as-drawn primitive for any active recording.
+            std::lock_guard<std::mutex> lk(g_recordMutex);
+            if (g_recordWriter) g_recordBuffer.push_back(p);
         });
         g_interceptor->beginFrame(
             ::vj::applyAutoMode(g_params, g_auto, static_cast<int>(g_frameCounter)),
@@ -270,6 +284,20 @@ void ensureInit() {
                         g_params.filter = g_filterInterpolation.load()
                             ? g_filterBank.selectInterpolated(val)
                             : g_filterBank.selectSnap(val);
+                    }
+                }
+                // Flush the recording buffer for the frame that just ended.
+                {
+                    std::lock_guard<std::mutex> lk(g_recordMutex);
+                    if (g_recordWriter) {
+                        g_recordWriter->beginFrame(
+                            static_cast<int>(g_frameCounter),
+                            static_cast<int>(g_recordBuffer.size()));
+                        for (const auto& p : g_recordBuffer) {
+                            g_recordWriter->writePrimitive(p);
+                        }
+                        g_recordBuffer.clear();
+                        g_recordedFrames.fetch_add(1);
                     }
                 }
                 g_interceptor->beginFrame(
@@ -463,6 +491,50 @@ void setInterpolation(bool on) { g_filterInterpolation.store(on); }
 int currentCC() { return g_filterLastCC.load(); }
 
 }  // namespace filter
+
+namespace record {
+
+bool isRecording() {
+    std::lock_guard<std::mutex> lk(g_recordMutex);
+    return g_recordWriter != nullptr;
+}
+
+bool start(const std::string& path) {
+    ensureInit();
+    std::lock_guard<std::mutex> lk(g_recordMutex);
+    auto w = std::make_unique<::vj::PrimitiveStreamWriter>();
+    if (!w->open(path)) {
+        vjLog("[VJ] record: failed to open %s\n", path.c_str());
+        return false;
+    }
+    g_recordWriter = std::move(w);
+    g_recordPath   = path;
+    g_recordBuffer.clear();
+    g_recordedFrames.store(0);
+    vjLog("[VJ] record: started -> %s\n", path.c_str());
+    return true;
+}
+
+void stop() {
+    std::lock_guard<std::mutex> lk(g_recordMutex);
+    if (!g_recordWriter) return;
+    g_recordWriter->close();
+    g_recordWriter.reset();
+    vjLog("[VJ] record: stopped (%llu frames -> %s)\n",
+          static_cast<unsigned long long>(g_recordedFrames.load()),
+          g_recordPath.c_str());
+    g_recordPath.clear();
+    g_recordBuffer.clear();
+}
+
+std::string currentPath() {
+    std::lock_guard<std::mutex> lk(g_recordMutex);
+    return g_recordPath;
+}
+
+uint64_t recordedFrames() { return g_recordedFrames.load(); }
+
+}  // namespace record
 
 }  // namespace vj
 }  // namespace PCSX

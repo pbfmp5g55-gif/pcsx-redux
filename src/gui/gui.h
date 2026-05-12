@@ -61,6 +61,7 @@
 #include "gui/widgets/ram-viewer.h"
 #include "gui/widgets/filter_preset_panel.h"
 #include "gui/widgets/midi_config_panel.h"
+#include "gui/widgets/recorder_panel.h"
 #include "gui/widgets/vj_panel.h"
 #include "gui/widgets/vram-viewer.h"
 #include "imgui.h"
@@ -442,6 +443,9 @@ class GUI final : public UI {
 
     bool m_showFilterPresets = false;
     Widgets::FilterPresetPanel m_filterPresetPanel{m_showFilterPresets};
+
+    bool m_showRecorder = false;
+    Widgets::RecorderPanel m_recorderPanel{m_showRecorder};
 
     EventBus::Listener m_listener;
 

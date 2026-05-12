@@ -27,6 +27,7 @@
 
 #include "core/gpu.h"
 #include "vj/AutoMode.h"
+#include "vj/FilterPresetBank.h"
 #include "vj/MidiController.h"
 #include "vj/Params.h"
 #include "vj/Primitive.h"
@@ -86,6 +87,34 @@ void clearLastReceivedCC();
 int getCC(int cc);
 
 }  // namespace midi
+
+// Filter preset bank — 16-slot bank of FilterParams, selectable via a single
+// MIDI CC (when filter::isMidiEnabled()). With interpolation enabled the CC
+// value blends between neighbouring slots; otherwise it hard-snaps to the
+// closest slot. Independent of the 8-axis MIDI mapping above (different CC
+// number, different code path).
+namespace filter {
+
+// Direct access for the UI (read/write all 16 slots and their names).
+::vj::FilterPresetBank& presetBank();
+
+bool isMidiEnabled();
+void setMidiEnabled(bool enabled);
+
+// CC number to listen on for the preset-select knob. Default 28 (sits just
+// past the 8-axis defaults at 20..27).
+int  presetCC();
+void setPresetCC(int cc);
+
+// When true, knob position blends adjacent slots; when false, hard-snap.
+bool interpolation();
+void setInterpolation(bool on);
+
+// Last CC value observed on the preset CC (0..127), or -1 if none received
+// since the port was opened. UI uses this to show "current knob position".
+int currentCC();
+
+}  // namespace filter
 
 namespace detail {
 // Submits prim into the libvj interceptor. If the interceptor approves (or

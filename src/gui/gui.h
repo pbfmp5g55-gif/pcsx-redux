@@ -59,6 +59,7 @@
 #include "gui/widgets/shader-editor.h"
 #include "gui/widgets/sio1.h"
 #include "gui/widgets/ram-viewer.h"
+#include "gui/widgets/filter_preset_panel.h"
 #include "gui/widgets/midi_config_panel.h"
 #include "gui/widgets/vj_panel.h"
 #include "gui/widgets/vram-viewer.h"
@@ -438,6 +439,9 @@ class GUI final : public UI {
 
     bool m_showMidiConfig = false;
     Widgets::MidiConfigPanel m_midiConfigPanel{m_showMidiConfig};
+
+    bool m_showFilterPresets = false;
+    Widgets::FilterPresetPanel m_filterPresetPanel{m_showFilterPresets};
 
     EventBus::Listener m_listener;
 

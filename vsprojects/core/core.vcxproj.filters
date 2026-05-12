@@ -139,6 +139,9 @@
     <ClCompile Include="..\..\third_party\libvj\vj\src\DepthDelayQueue.cpp">
       <Filter>Source Files\libvj</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\third_party\libvj\vj\src\FilterPresetBank.cpp">
+      <Filter>Source Files\libvj</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\third_party\libvj\vj\src\MidiController.cpp">
       <Filter>Source Files\libvj</Filter>
     </ClCompile>

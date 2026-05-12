@@ -158,6 +158,7 @@
     <ClCompile Include="..\..\src\gui\widgets\registers.cc" />
     <ClCompile Include="..\..\src\gui\widgets\shader-editor.cc" />
     <ClCompile Include="..\..\src\gui\widgets\sio1.cc" />
+    <ClCompile Include="..\..\src\gui\widgets\filter_preset_panel.cc" />
     <ClCompile Include="..\..\src\gui\widgets\midi_config_panel.cc" />
     <ClCompile Include="..\..\src\gui\widgets\vj_panel.cc" />
     <ClCompile Include="..\..\src\gui\widgets\vram-viewer.cc" />
@@ -197,6 +198,7 @@
     <ClInclude Include="..\..\src\gui\widgets\registers.h" />
     <ClInclude Include="..\..\src\gui\widgets\shader-editor.h" />
     <ClInclude Include="..\..\src\gui\widgets\sio1.h" />
+    <ClInclude Include="..\..\src\gui\widgets\filter_preset_panel.h" />
     <ClInclude Include="..\..\src\gui\widgets\midi_config_panel.h" />
     <ClInclude Include="..\..\src\gui\widgets\vj_panel.h" />
     <ClInclude Include="..\..\src\gui\widgets\vram-viewer.h" />

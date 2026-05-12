@@ -32,6 +32,7 @@
 #include "core/system.h"
 #include "support/eventbus.h"
 #include "vj/AutoMode.h"
+#include "vj/FilterPresetBank.h"
 #include "vj/MidiController.h"
 #include "vj/Params.h"
 #include "vj/PrimitiveInterceptor.h"
@@ -65,6 +66,16 @@ std::mutex g_midiMutex;
 std::unique_ptr<::vj::RtMidiController> g_midi;
 ::vj::CCMapping g_midiMapping;
 std::atomic<bool> g_midiEnabled{false};
+
+// Filter preset bank state. Independent of the 8-axis MIDI above — different
+// CC, different code path. Bank itself is mutated from the UI thread; the
+// VSync reader only takes a snapshot of the values it needs each frame.
+::vj::FilterPresetBank g_filterBank;
+std::mutex g_filterBankMutex;
+std::atomic<bool> g_filterMidiEnabled{false};
+std::atomic<int>  g_filterPresetCC{28};  // sits past 8-axis defaults 20..27
+std::atomic<bool> g_filterInterpolation{true};
+std::atomic<int>  g_filterLastCC{-1};
 
 uint64_t g_frameCounter = 0;
 uint64_t g_thisFramePrims = 0;
@@ -143,6 +154,59 @@ void ensureInit() {
         g_auto.depth   = envFloat("VJ_AUTO_DEPTH", g_auto.depth);
         g_auto.rate    = envFloat("VJ_AUTO_RATE",  g_auto.rate);
 
+        // Demo preset bank. 16 slots filled with useful starting points;
+        // users can overwrite any of them from the UI and persist via
+        // pcsx.json on shutdown.
+        {
+            auto& b = g_filterBank;
+            auto setSlot = [&](int i, const char* name, const ::vj::FilterParams& fp) {
+                b.slot(i).name   = name;
+                b.slot(i).params = fp;
+            };
+            ::vj::FilterParams f;
+            setSlot(0, "All",          f);
+            f = {}; f.texturedOnly = true;
+            setSlot(1, "Keys only",    f);
+            f = {}; f.minArea = 15000.0f;
+            setSlot(2, "BG only",      f);
+            f = {}; f.maxArea = 2000.0f;
+            setSlot(3, "Small obj",    f);
+            f = {}; f.everyN = 2;
+            setSlot(4, "Sparse 2",     f);
+            f = {}; f.everyN = 4;
+            setSlot(5, "Sparse 4",     f);
+            f = {}; f.everyN = 8;
+            setSlot(6, "Sparse 8",     f);
+            f = {}; f.regionX0 = 0.0f;   f.regionY0 = 0.0f;
+                    f.regionX1 = 320.0f; f.regionY1 = 120.0f;
+            setSlot(7, "Top half",     f);
+            f = {}; f.regionX0 = 0.0f;   f.regionY0 = 120.0f;
+                    f.regionX1 = 320.0f; f.regionY1 = 240.0f;
+            setSlot(8, "Bottom half",  f);
+            f = {}; f.regionX0 = 0.0f;   f.regionY0 = 0.0f;
+                    f.regionX1 = 160.0f; f.regionY1 = 240.0f;
+            setSlot(9, "Left half",    f);
+            f = {}; f.regionX0 = 160.0f; f.regionY0 = 0.0f;
+                    f.regionX1 = 320.0f; f.regionY1 = 240.0f;
+            setSlot(10, "Right half",  f);
+            f = {}; f.regionX0 = 80.0f;  f.regionY0 = 60.0f;
+                    f.regionX1 = 240.0f; f.regionY1 = 180.0f;
+            setSlot(11, "Center",      f);
+            f = {}; f.texturedOnly = true; f.everyN = 4;
+            setSlot(12, "Keys+Sparse4", f);
+            f = {}; f.minArea = 15000.0f;  f.everyN = 4;
+            setSlot(13, "BG+Sparse4",   f);
+            f = {}; f.maxArea = 2000.0f;
+                    f.regionX0 = 80.0f;  f.regionY0 = 60.0f;
+                    f.regionX1 = 240.0f; f.regionY1 = 180.0f;
+            setSlot(14, "Small+Center", f);
+            f = {}; f.minArea = 20000.0f;  f.everyN = 2;
+            setSlot(15, "Heavy BG",     f);
+        }
+        g_filterMidiEnabled.store(envInt("VJ_FILTER_PRESET_MIDI", 0) != 0);
+        g_filterPresetCC.store(envInt("VJ_FILTER_PRESET_CC", 28));
+        g_filterInterpolation.store(envInt("VJ_FILTER_PRESET_INTERP", 1) != 0);
+
         // MIDI seed. Both VJ_MIDI_ENABLED=1 and a valid VJ_MIDI_PORT are
         // required to actually open a port at startup. The UI can change both
         // at runtime via the midi::* API.
@@ -190,6 +254,22 @@ void ensureInit() {
                         g_params.color    = mp.color;
                         g_params.depth    = mp.depth;
                         g_params.chaos    = mp.chaos;
+                    }
+                }
+                // Filter preset MIDI: independent path, drives g_params.filter
+                // from the preset bank based on a dedicated CC value.
+                if (g_filterMidiEnabled.load()) {
+                    int val = -1;
+                    {
+                        std::lock_guard<std::mutex> lk(g_midiMutex);
+                        if (g_midi) val = g_midi->getCC(g_filterPresetCC.load());
+                    }
+                    if (val >= 0) {
+                        g_filterLastCC.store(val);
+                        std::lock_guard<std::mutex> lk(g_filterBankMutex);
+                        g_params.filter = g_filterInterpolation.load()
+                            ? g_filterBank.selectInterpolated(val)
+                            : g_filterBank.selectSnap(val);
                     }
                 }
                 g_interceptor->beginFrame(
@@ -356,6 +436,33 @@ int getCC(int cc) {
 }
 
 }  // namespace midi
+
+namespace filter {
+
+::vj::FilterPresetBank& presetBank() {
+    ensureInit();
+    return g_filterBank;
+}
+
+bool isMidiEnabled() { return g_filterMidiEnabled.load(); }
+void setMidiEnabled(bool e) {
+    ensureInit();
+    g_filterMidiEnabled.store(e);
+}
+
+int  presetCC() { return g_filterPresetCC.load(); }
+void setPresetCC(int cc) {
+    if (cc < 0) cc = 0;
+    if (cc > 127) cc = 127;
+    g_filterPresetCC.store(cc);
+}
+
+bool interpolation() { return g_filterInterpolation.load(); }
+void setInterpolation(bool on) { g_filterInterpolation.store(on); }
+
+int currentCC() { return g_filterLastCC.load(); }
+
+}  // namespace filter
 
 }  // namespace vj
 }  // namespace PCSX

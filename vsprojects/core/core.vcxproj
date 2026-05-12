@@ -150,6 +150,7 @@
     <ClCompile Include="..\..\third_party\libvj\vj\src\AutoMode.cpp" />
     <ClCompile Include="..\..\third_party\libvj\vj\src\DebugOverlay.cpp" />
     <ClCompile Include="..\..\third_party\libvj\vj\src\DepthDelayQueue.cpp" />
+    <ClCompile Include="..\..\third_party\libvj\vj\src\FilterPresetBank.cpp" />
     <ClCompile Include="..\..\third_party\libvj\vj\src\MidiController.cpp" />
     <ClCompile Include="..\..\third_party\libvj\vj\src\PrimitiveContext.cpp" />
     <ClCompile Include="..\..\third_party\libvj\vj\src\PrimitiveInterceptor.cpp" />

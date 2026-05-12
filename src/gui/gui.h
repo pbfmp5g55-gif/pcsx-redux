@@ -60,6 +60,7 @@
 #include "gui/widgets/sio1.h"
 #include "gui/widgets/ram-viewer.h"
 #include "gui/widgets/filter_preset_panel.h"
+#include "gui/widgets/live_panel.h"
 #include "gui/widgets/midi_config_panel.h"
 #include "gui/widgets/recorder_panel.h"
 #include "gui/widgets/vj_panel.h"
@@ -446,6 +447,9 @@ class GUI final : public UI {
 
     bool m_showRecorder = false;
     Widgets::RecorderPanel m_recorderPanel{m_showRecorder};
+
+    bool m_showLive = false;
+    Widgets::LivePanel m_livePanel{m_showLive};
 
     EventBus::Listener m_listener;
 

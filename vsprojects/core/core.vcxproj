@@ -147,6 +147,7 @@
     <ClCompile Include="..\..\src\core\gpu.cc" />
     <ClCompile Include="..\..\src\core\gpulogger.cc" />
     <ClCompile Include="..\..\src\core\vj_bridge.cc" />
+    <ClCompile Include="..\..\src\core\vj_ipc_ring.cc" />
     <ClCompile Include="..\..\third_party\libvj\vj\src\AutoMode.cpp" />
     <ClCompile Include="..\..\third_party\libvj\vj\src\DebugOverlay.cpp" />
     <ClCompile Include="..\..\third_party\libvj\vj\src\DepthDelayQueue.cpp" />

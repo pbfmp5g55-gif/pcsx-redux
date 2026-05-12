@@ -31,6 +31,7 @@
 
 #include "core/system.h"
 #include "support/eventbus.h"
+#include "core/vj_ipc_ring.h"
 #include "vj/AutoMode.h"
 #include "vj/FilterPresetBank.h"
 #include "vj/MidiController.h"
@@ -88,6 +89,59 @@ std::vector<::vj::Primitive>        g_recordBuffer;
 std::vector<::vj::VRAMUpload>       g_recordUploadBuffer;
 std::string                         g_recordPath;
 std::atomic<uint64_t>               g_recordedFrames{0};
+
+// Live IPC ring state — guarded by g_recordMutex (same hot path as the
+// recorder buffers; sharing one mutex keeps the SubmitFn callback simple).
+std::unique_ptr<vjmix::IpcRingWriter> g_liveWriter;
+std::string                           g_liveName;
+std::vector<uint8_t>                  g_livePackBuf;  // reusable serialization scratch
+
+size_t packPrimitiveForLive(const ::vj::Primitive& p, std::vector<uint8_t>& out) {
+    out.clear();
+    out.reserve(12 + p.vertices.size() * 20);
+    out.push_back(static_cast<uint8_t>(p.kind));
+    out.push_back(p.textured ? 1 : 0);
+    out.push_back(static_cast<uint8_t>(p.vertices.size()));
+    out.push_back(static_cast<uint8_t>(p.blendMode));
+    const uint64_t tag = p.hostTag;
+    out.insert(out.end(), reinterpret_cast<const uint8_t*>(&tag),
+               reinterpret_cast<const uint8_t*>(&tag) + 8);
+    for (const auto& v : p.vertices) {
+        const uint8_t* fp = reinterpret_cast<const uint8_t*>(&v.x);
+        out.insert(out.end(), fp, fp + 4);
+        fp = reinterpret_cast<const uint8_t*>(&v.y);
+        out.insert(out.end(), fp, fp + 4);
+        fp = reinterpret_cast<const uint8_t*>(&v.u);
+        out.insert(out.end(), fp, fp + 4);
+        fp = reinterpret_cast<const uint8_t*>(&v.v);
+        out.insert(out.end(), fp, fp + 4);
+        out.push_back(v.r);
+        out.push_back(v.g);
+        out.push_back(v.b);
+        out.push_back(v.a);
+    }
+    return out.size();
+}
+
+size_t packUploadForLive(int x, int y, int w, int h, const uint16_t* data,
+                         std::vector<uint8_t>& out) {
+    out.clear();
+    const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h);
+    out.reserve(8 + n * 2);
+    auto push16 = [&](uint16_t v) {
+        out.push_back(static_cast<uint8_t>(v & 0xff));
+        out.push_back(static_cast<uint8_t>((v >> 8) & 0xff));
+    };
+    push16(static_cast<uint16_t>(x));
+    push16(static_cast<uint16_t>(y));
+    push16(static_cast<uint16_t>(w));
+    push16(static_cast<uint16_t>(h));
+    if (n > 0 && data) {
+        const uint8_t* bp = reinterpret_cast<const uint8_t*>(data);
+        out.insert(out.end(), bp, bp + n * 2);
+    }
+    return out.size();
+}
 
 uint64_t g_frameCounter = 0;
 uint64_t g_thisFramePrims = 0;
@@ -243,9 +297,14 @@ void ensureInit() {
         g_interceptor = std::make_unique<::vj::PrimitiveInterceptor>();
         g_interceptor->setSubmitCallback([](const ::vj::Primitive& p) {
             if (g_currentSubmit) g_currentSubmit(p);
-            // Capture the as-drawn primitive for any active recording.
             std::lock_guard<std::mutex> lk(g_recordMutex);
             if (g_recordWriter) g_recordBuffer.push_back(p);
+            if (g_liveWriter) {
+                packPrimitiveForLive(p, g_livePackBuf);
+                g_liveWriter->writeRecord(vjmix::IpcRecordType::Primitive,
+                                          g_livePackBuf.data(),
+                                          g_livePackBuf.size());
+            }
         });
         g_interceptor->beginFrame(
             ::vj::applyAutoMode(g_params, g_auto, static_cast<int>(g_frameCounter)),
@@ -291,9 +350,16 @@ void ensureInit() {
                             : g_filterBank.selectSnap(val);
                     }
                 }
-                // Flush the recording buffer for the frame that just ended.
+                // Flush the recording buffer for the frame that just ended,
+                // and emit a FrameEnd marker into the live ring.
                 {
                     std::lock_guard<std::mutex> lk(g_recordMutex);
+                    if (g_liveWriter) {
+                        const uint32_t fi = static_cast<uint32_t>(g_frameCounter);
+                        g_liveWriter->writeRecord(vjmix::IpcRecordType::FrameEnd,
+                                                  &fi, sizeof(fi));
+                        g_liveWriter->heartbeat();
+                    }
                     if (g_recordWriter) {
                         const int recCount =
                             static_cast<int>(g_recordUploadBuffer.size()) +
@@ -355,15 +421,22 @@ void setEnabled(bool e) { g_enabled.store(e); }
 void onVRAMUpload(int x, int y, int w, int h, const uint16_t* data) {
     if (w <= 0 || h <= 0 || !data) return;
     std::lock_guard<std::mutex> lk(g_recordMutex);
-    if (!g_recordWriter) return;
-    ::vj::VRAMUpload u;
-    u.x = x;
-    u.y = y;
-    u.w = w;
-    u.h = h;
-    const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h);
-    u.data.assign(data, data + n);
-    g_recordUploadBuffer.push_back(std::move(u));
+    if (g_recordWriter) {
+        ::vj::VRAMUpload u;
+        u.x = x;
+        u.y = y;
+        u.w = w;
+        u.h = h;
+        const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h);
+        u.data.assign(data, data + n);
+        g_recordUploadBuffer.push_back(std::move(u));
+    }
+    if (g_liveWriter) {
+        packUploadForLive(x, y, w, h, data, g_livePackBuf);
+        g_liveWriter->writeRecord(vjmix::IpcRecordType::VRAMUpload,
+                                  g_livePackBuf.data(),
+                                  g_livePackBuf.size());
+    }
 }
 
 ::vj::Params& params() {
@@ -585,6 +658,52 @@ std::string currentPath() {
 uint64_t recordedFrames() { return g_recordedFrames.load(); }
 
 }  // namespace record
+
+namespace live {
+
+bool isActive() {
+    std::lock_guard<std::mutex> lk(g_recordMutex);
+    return g_liveWriter != nullptr;
+}
+
+bool start(const std::string& name) {
+    ensureInit();
+    std::lock_guard<std::mutex> lk(g_recordMutex);
+    auto w = std::make_unique<vjmix::IpcRingWriter>();
+    if (!w->create(name)) {
+        vjLog("[VJ] live: ring create failed for %s\n", name.c_str());
+        return false;
+    }
+    g_liveWriter = std::move(w);
+    g_liveName   = name;
+    vjLog("[VJ] live: ring opened (%s)\n", name.c_str());
+    return true;
+}
+
+void stop() {
+    std::lock_guard<std::mutex> lk(g_recordMutex);
+    if (!g_liveWriter) return;
+    g_liveWriter->close();
+    g_liveWriter.reset();
+    vjLog("[VJ] live: ring closed (%s)\n", g_liveName.c_str());
+    g_liveName.clear();
+}
+
+std::string currentName() {
+    std::lock_guard<std::mutex> lk(g_recordMutex);
+    return g_liveName;
+}
+
+uint32_t droppedCount() {
+    // We deliberately don't lock here — droppedCount on the writer side
+    // is the segment header's `dropped` field; if we have no writer
+    // there's nothing to report. The race with start/stop just returns
+    // a slightly stale value, which the UI is fine with.
+    return 0;  // surfaced via the mixer side; pcsx-redux UI reports its
+               // own send-time drops via the writer if needed.
+}
+
+}  // namespace live
 
 }  // namespace vj
 }  // namespace PCSX

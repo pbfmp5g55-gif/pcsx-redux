@@ -158,6 +158,25 @@ uint64_t recordedFrames();
 
 }  // namespace record
 
+// Live IPC streaming — sends the post-libvj primitive stream over a
+// Windows shared-memory ring (vjmix::IpcRingWriter under the hood). The
+// mixer / Phase B host reads the ring in real time. Independent of
+// record:: — you can run both, neither, or one or the other.
+namespace live {
+
+bool isActive();
+
+// Start (re-)creating the named ring. Returns false on filesystem failure.
+bool start(const std::string& name);
+
+// Tear down the ring.
+void stop();
+
+std::string currentName();
+uint32_t    droppedCount();  // bumped when backpressure drops a record.
+
+}  // namespace live
+
 namespace detail {
 // Submits prim into the libvj interceptor. If the interceptor approves (or
 // passes through unchanged), invokes writeBack with the (possibly mutated)

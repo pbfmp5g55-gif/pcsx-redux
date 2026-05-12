@@ -23,7 +23,10 @@ namespace vjmix {
 
 constexpr uint32_t kRingMagic    = 0x47524A56u;  // 'VJRG' little-endian
 constexpr uint32_t kRingVersion  = 1u;
-constexpr size_t   kDefaultRingDataSize = 2u * 1024u * 1024u;  // 2 MB payload
+// 8 MB payload. Funkin gameplay routinely fills 2 MB before the mixer drains
+// it (textured prim records + VRAM upload records add up fast), causing
+// record-level drops and visible flicker on the mixer side.
+constexpr size_t   kDefaultRingDataSize = 8u * 1024u * 1024u;
 
 enum class IpcRecordType : uint8_t {
     Primitive  = 0,

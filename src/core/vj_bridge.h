@@ -279,8 +279,82 @@ inline bool onPrimitive(PCSX::GPU::Line<sh, lt, b>&) {
     return true;
 }
 
-template <PCSX::GPU::Size s, PCSX::GPU::Textured t, PCSX::GPU::Blend b, PCSX::GPU::Modulation m>
-inline bool onPrimitive(PCSX::GPU::Rect<s, t, b, m>&) {
+// Rects (PS1 GP0 0x60..0x7F sprite commands) are unpacked into a 4-vertex
+// vj::Primitive (kind=Quad) so the mixer sees backgrounds, HUDs and other
+// sprite-based geometry. pcsx-redux's own GPU rendering of the Rect is
+// left intact — the writeBack closure is a noop, so libvj's glitch
+// effects (geometry jitter etc.) don't mutate the rect on the emulator's
+// own picture. That's the deliberate limit: a deformed quad cannot be
+// expressed as a Rect (corner+size), and rejecting the rect entirely
+// would break the game.
+template <PCSX::GPU::Size s, PCSX::GPU::Textured t, PCSX::GPU::Blend b,
+          PCSX::GPU::Modulation m>
+inline bool onPrimitive(PCSX::GPU::Rect<s, t, b, m>& p) {
+    if (!isEnabled()) return true;
+    constexpr bool textured = (t == PCSX::GPU::Textured::Yes);
+    // Raw-texture rects (textured && modulation off) have no `color` field
+    // on the Rect struct (POLYFILL_NO_UNIQUE_ADDRESS makes it Empty), so
+    // we only read .color when the template guarantees it exists.
+    constexpr bool hasColor =
+        (!textured) || (m == PCSX::GPU::Modulation::On);
+
+    ::vj::Primitive prim;
+    prim.kind = ::vj::PrimitiveKind::Quad;
+    prim.textured = textured;
+    prim.blendMode = (b == PCSX::GPU::Blend::Semi)
+                         ? ::vj::BlendMode::Average
+                         : ::vj::BlendMode::Opaque;
+    if constexpr (textured) {
+        prim.hostTag = (static_cast<uint64_t>(p.clutraw) & 0xFFFFu) |
+                       ((static_cast<uint64_t>(p.tpage.raw) & 0xFFFFu) << 24);
+        const unsigned tp = (static_cast<unsigned>(p.tpage.raw) >> 7) & 0x3u;
+        const int paletteEntries = (tp == 0u) ? 16 : (tp == 1u) ? 256 : 0;
+        if (paletteEntries > 0) {
+            detail::captureClut(static_cast<uint16_t>(p.clutraw),
+                                paletteEntries, prim.palette);
+        }
+    }
+    const int x0 = p.x + p.offset.x;
+    const int y0 = p.y + p.offset.y;
+    const int x1 = x0 + p.w;
+    const int y1 = y0 + p.h;
+    // PS1 vertex-colour 0x80 is the "no modulation" sentinel that the
+    // mixer's textured shader treats as 1.0x; using it as the default
+    // keeps raw-texture rects looking the same as in the emulator.
+    uint8_t r = 0x80, g = 0x80, bch = 0x80;
+    if constexpr (hasColor) {
+        const uint32_t c = p.color;
+        r   = static_cast<uint8_t>((c >>  0) & 0xff);
+        g   = static_cast<uint8_t>((c >>  8) & 0xff);
+        bch = static_cast<uint8_t>((c >> 16) & 0xff);
+    }
+    int u0 = 0, v0 = 0, u1 = 0, v1 = 0;
+    if constexpr (textured) {
+        u0 = static_cast<int>(p.u);
+        v0 = static_cast<int>(p.v);
+        u1 = u0 + p.w;
+        v1 = v0 + p.h;
+    }
+    prim.vertices.resize(4);
+    auto setVtx = [&](unsigned i, int x, int y, int u, int v) {
+        auto& vv = prim.vertices[i];
+        vv.x = static_cast<float>(x);
+        vv.y = static_cast<float>(y);
+        vv.u = static_cast<float>(u);
+        vv.v = static_cast<float>(v);
+        vv.r = r;
+        vv.g = g;
+        vv.b = bch;
+        vv.a = 255;
+    };
+    // Vertex order matches the existing Quad path in the mixer
+    // (drawTextured assumes 0=top-left, 1=top-right, 2=bottom-left,
+    // 3=bottom-right and stitches the two triangles 0-1-2 + 1-3-2).
+    setVtx(0, x0, y0, u0, v0);
+    setVtx(1, x1, y0, u1, v0);
+    setVtx(2, x0, y1, u0, v1);
+    setVtx(3, x1, y1, u1, v1);
+    detail::intercept(prim, [](const ::vj::Primitive&) {});
     return true;
 }
 

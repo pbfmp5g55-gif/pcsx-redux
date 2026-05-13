@@ -178,6 +178,28 @@ uint32_t    droppedCount();  // bumped when backpressure drops a record.
 }  // namespace live
 
 namespace detail {
+
+// Decode the PS1 ABR (semi-transparency mix mode) sub-field from a TPage
+// register into the matching libvj BlendMode. ABR lives in tpage.raw
+// bits 5..6:
+//   0 = Average        (back/2 + front/2)
+//   1 = Additive       (back + front)
+//   2 = Subtractive    (back - front)
+//   3 = Additive 1/4   (back + front/4)
+// Only valid to call when the primitive's Blend template parameter is
+// Semi *and* it carries a TPage (i.e. it's textured); the untextured
+// semi-transparent path keeps the historical Average fallback because the
+// TPage register isn't part of the primitive's own state.
+inline ::vj::BlendMode abrToBlendMode(unsigned tpageRaw) {
+    switch ((tpageRaw >> 5) & 0x3u) {
+        case 0:  return ::vj::BlendMode::Average;
+        case 1:  return ::vj::BlendMode::Additive;
+        case 2:  return ::vj::BlendMode::Subtractive;
+        case 3:  return ::vj::BlendMode::AdditiveQuarter;
+    }
+    return ::vj::BlendMode::Average;  // unreachable, kept for compiler
+}
+
 // Submits prim into the libvj interceptor. If the interceptor approves (or
 // passes through unchanged), invokes writeBack with the (possibly mutated)
 // primitive and returns true. If the interceptor drops the primitive,
@@ -205,14 +227,21 @@ inline bool onPrimitive(PCSX::GPU::Poly<sh, shape, t, b, m>& p) {
     ::vj::Primitive prim;
     prim.kind = quad ? ::vj::PrimitiveKind::Quad : ::vj::PrimitiveKind::Triangle;
     prim.textured = textured;
-    // PS1 semi-transparency = the GP0 command bit; the ABR sub-mode lives
-    // in TPage and is not part of this template's parameters. For now we
-    // collapse all semi-transparent primitives to Average mode (mode 0,
-    // the most common case). Future work: pull ABR out of g_emulator's
-    // last TPage register and pick the right sub-mode.
-    prim.blendMode = (b == PCSX::GPU::Blend::Semi)
-                         ? ::vj::BlendMode::Average
-                         : ::vj::BlendMode::Opaque;
+    // PS1 semi-transparency: ABR sub-mode lives in tpage.raw bits 5..6.
+    // For textured semi-transparent primitives we can pull the right
+    // sub-mode out of the primitive's own TPage. Untextured semi prims
+    // don't carry a TPage in this template, so they keep the Average
+    // fallback (which matches the most frequent untextured-blend case).
+    if (b == PCSX::GPU::Blend::Semi) {
+        if constexpr (textured) {
+            prim.blendMode = detail::abrToBlendMode(
+                static_cast<unsigned>(p.tpage.raw));
+        } else {
+            prim.blendMode = ::vj::BlendMode::Average;
+        }
+    } else {
+        prim.blendMode = ::vj::BlendMode::Opaque;
+    }
     // Pack the GPU's TPage and CLUT registers into hostTag so the mixer
     // (or any other consumer) can locate the texture page in VRAM and
     // the palette for 4bpp/8bpp CLUT sprites.
@@ -301,9 +330,16 @@ inline bool onPrimitive(PCSX::GPU::Rect<s, t, b, m>& p) {
     ::vj::Primitive prim;
     prim.kind = ::vj::PrimitiveKind::Quad;
     prim.textured = textured;
-    prim.blendMode = (b == PCSX::GPU::Blend::Semi)
-                         ? ::vj::BlendMode::Average
-                         : ::vj::BlendMode::Opaque;
+    if (b == PCSX::GPU::Blend::Semi) {
+        if constexpr (textured) {
+            prim.blendMode = detail::abrToBlendMode(
+                static_cast<unsigned>(p.tpage.raw));
+        } else {
+            prim.blendMode = ::vj::BlendMode::Average;
+        }
+    } else {
+        prim.blendMode = ::vj::BlendMode::Opaque;
+    }
     if constexpr (textured) {
         prim.hostTag = (static_cast<uint64_t>(p.clutraw) & 0xFFFFu) |
                        ((static_cast<uint64_t>(p.tpage.raw) & 0xFFFFu) << 24);

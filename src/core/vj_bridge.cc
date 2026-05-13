@@ -101,7 +101,12 @@ std::vector<uint8_t>                  g_livePackBuf;  // reusable serialization 
 
 size_t packPrimitiveForLive(const ::vj::Primitive& p, std::vector<uint8_t>& out) {
     out.clear();
-    out.reserve(12 + p.vertices.size() * 20);
+    // Wire layout mirrors PrimitiveStream format v3: header + vertices +
+    // paletteKind byte + optional palette[16|256]. Mixer-side unpacker
+    // skips the trailing bytes when the record length doesn't cover them,
+    // so older mixers that predate inline palettes can still parse the
+    // body — they just don't see the CLUT colours.
+    out.reserve(12 + p.vertices.size() * 20 + 1 + p.palette.size() * 2);
     out.push_back(static_cast<uint8_t>(p.kind));
     out.push_back(p.textured ? 1 : 0);
     out.push_back(static_cast<uint8_t>(p.vertices.size()));
@@ -122,6 +127,20 @@ size_t packPrimitiveForLive(const ::vj::Primitive& p, std::vector<uint8_t>& out)
         out.push_back(v.g);
         out.push_back(v.b);
         out.push_back(v.a);
+    }
+    uint8_t paletteKind = 0;
+    size_t  entries     = 0;
+    if (p.palette.size() == 16) {
+        paletteKind = 1;
+        entries     = 16;
+    } else if (p.palette.size() == 256) {
+        paletteKind = 2;
+        entries     = 256;
+    }
+    out.push_back(paletteKind);
+    if (entries > 0) {
+        const uint8_t* pp = reinterpret_cast<const uint8_t*>(p.palette.data());
+        out.insert(out.end(), pp, pp + entries * 2);
     }
     return out.size();
 }
@@ -487,6 +506,33 @@ bool intercept(::vj::Primitive& prim,
     }
 
     return submitted;
+}
+
+void captureClut(uint16_t clutraw, int paletteEntries,
+                 std::vector<uint16_t>& out) {
+    out.clear();
+    if (paletteEntries != 16 && paletteEntries != 256) return;
+    if (!PCSX::g_emulator || !PCSX::g_emulator->m_gpu) return;
+
+    // BORROW lets us peek at the live VRAM without forcing the GPU thread
+    // to copy. This runs once per textured primitive (potentially hundreds
+    // per frame) so the overhead matters.
+    PCSX::Slice slice =
+        PCSX::g_emulator->m_gpu->getVRAM(PCSX::GPU::Ownership::BORROW);
+    const uint16_t* vram = static_cast<const uint16_t*>(slice.data<void>());
+    if (!vram) return;
+
+    // clutraw layout: bits 0..5 = clutX/16, bits 6..14 = clutY (rows).
+    const int clutX = static_cast<int>((clutraw & 0x3Fu) * 16u);
+    const int clutY = static_cast<int>((clutraw >> 6) & 0x1FFu);
+    if (clutX < 0 || clutY < 0 || clutY >= 512) return;
+    if (clutX + paletteEntries > 1024) return;  // off-edge CLUT, skip
+
+    out.resize(static_cast<size_t>(paletteEntries));
+    std::memcpy(out.data(),
+                vram + static_cast<size_t>(clutY) * 1024u +
+                    static_cast<size_t>(clutX),
+                static_cast<size_t>(paletteEntries) * sizeof(uint16_t));
 }
 
 }  // namespace detail

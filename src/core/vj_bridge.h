@@ -184,6 +184,14 @@ namespace detail {
 // writeBack is not called and the function returns false.
 bool intercept(::vj::Primitive& prim,
                const std::function<void(const ::vj::Primitive&)>& writeBack);
+
+// Read the 16- or 256-entry CLUT for a CLUT-indexed textured primitive
+// straight out of PS1 VRAM at submission time. Output is resized to
+// `paletteEntries` (16 or 8 bpp) of PS1 5/5/5/M uint16 colours. Anything
+// other than 16 or 256 clears `out`. Called only on the textured path,
+// so 15bpp direct-colour primitives never reach here.
+void captureClut(uint16_t clutraw, int paletteEntries,
+                 std::vector<uint16_t>& out);
 }  // namespace detail
 
 template <PCSX::GPU::Shading sh, PCSX::GPU::Shape shape, PCSX::GPU::Textured t,
@@ -219,6 +227,14 @@ inline bool onPrimitive(PCSX::GPU::Poly<sh, shape, t, b, m>& p) {
     if constexpr (textured) {
         prim.hostTag = (static_cast<uint64_t>(p.clutraw) & 0xFFFFu) |
                        ((static_cast<uint64_t>(p.tpage.raw) & 0xFFFFu) << 24);
+        // TP (bpp) lives in tpage.raw bits 7..8: 0=4bpp / 1=8bpp / 2=15bpp.
+        // Only 4bpp and 8bpp use a CLUT; 15bpp samples VRAM directly.
+        const unsigned tp = (static_cast<unsigned>(p.tpage.raw) >> 7) & 0x3u;
+        const int paletteEntries = (tp == 0u) ? 16 : (tp == 1u) ? 256 : 0;
+        if (paletteEntries > 0) {
+            detail::captureClut(static_cast<uint16_t>(p.clutraw),
+                                paletteEntries, prim.palette);
+        }
     }
     prim.vertices.resize(vc);
     for (unsigned i = 0; i < vc; ++i) {

@@ -24,10 +24,13 @@ namespace vjmix {
 
 constexpr uint32_t kRingMagic    = 0x47524A56u;  // 'VJRG' little-endian
 constexpr uint32_t kRingVersion  = 1u;
-// 8 MB payload. Funkin gameplay routinely fills 2 MB before the mixer drains
-// it (textured prim records + VRAM upload records add up fast), causing
-// record-level drops and visible flicker on the mixer side.
-constexpr size_t   kDefaultRingDataSize = 8u * 1024u * 1024u;
+// 32 MB payload. After v0.7.7 added Rect (sprite) intercept, the per-frame
+// record count roughly tripled because PS1 games render backgrounds and
+// most HUDs as Rects. With 8 MB Funkin gameplay frames overflowed pending
+// commit (m_pendingFrameDoomed) and the mixer side flickered. 32 MB gives
+// plenty of headroom even for sprite-heavy titles; the cost is shared
+// memory address space, not RAM (only touched pages back to physical).
+constexpr size_t   kDefaultRingDataSize = 32u * 1024u * 1024u;
 
 enum class IpcRecordType : uint8_t {
     Primitive  = 0,

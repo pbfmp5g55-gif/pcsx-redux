@@ -31,6 +31,7 @@
 #include "core/r3000a.h"
 #include "core/sstate.h"
 #include "core/ui.h"
+#include "core/vj_bridge.h"
 #include "flags.h"
 #include "fmt/chrono.h"
 #include "gui/gui.h"
@@ -385,6 +386,14 @@ runner.init({
     if (args.get<bool>("run")) system->resume();
     s_ui->m_exeToLoad.set(MAKEU8(args.get<std::string>("loadexe", "").c_str()));
     if (s_ui->m_exeToLoad.empty()) s_ui->m_exeToLoad.set(MAKEU8(args.get<std::string>("exe", "").c_str()));
+
+    // VJ Live IPC auto-start: -vjring <name> starts the shared-memory ring
+    // immediately so a launcher script can spin up pcsx + mixer in one shot
+    // without clicking Debug → GPU → "Show VJ live IPC" → Start.
+    auto vjRing = args.get<std::string>("vjring", "");
+    if (!vjRing.empty()) {
+        PCSX::vj::live::start(vjRing);
+    }
 
     // And finally, let's run things.
     int exitCode = 0;
